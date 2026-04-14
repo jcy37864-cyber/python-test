@@ -14,18 +14,18 @@ if st.button("저장"):
     edited_df.to_excel("data.xlsm", index=False)
     st.success("저장 완료!")
 
-# 🔽 Unnamed: 7 컬럼 정렬
+# 🔽 Unnamed: 7 컬럼 그대로 표시 (정렬 없음)
 if "Unnamed: 7" in edited_df.columns:
-    result = edited_df[["Unnamed: 7"]].sort_values(by="Unnamed: 7", ascending=False)
+    result = edited_df[["Unnamed: 7"]]
 
-    st.subheader("결과 (내림차순)")
+    st.subheader("결과 (입력 순서 그대로)")
     st.dataframe(result)
 
-    # 🔽 다운로드 버튼 (정렬된 값 기준)
+    # 다운로드 버튼
     st.download_button(
         label="다운로드",
         data=result.to_csv(index=False).encode("utf-8-sig"),
-        file_name="sorted_data.csv",
+        file_name="data.csv",
         mime="text/csv"
     )
 else:
