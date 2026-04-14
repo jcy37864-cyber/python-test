@@ -14,10 +14,19 @@ if st.button("저장"):
     edited_df.to_excel("data.xlsm", index=False)
     st.success("저장 완료!")
 
-    # 다운로드 버튼 (한글 깨짐 방지)
+# 🔽 Unnamed: 7 컬럼 정렬
+if "Unnamed: 7" in edited_df.columns:
+    result = edited_df[["Unnamed: 7"]].sort_values(by="Unnamed: 7", ascending=False)
+
+    st.subheader("결과 (내림차순)")
+    st.dataframe(result)
+
+    # 🔽 다운로드 버튼 (정렬된 값 기준)
     st.download_button(
         label="다운로드",
-        data=edited_df.to_csv(index=False).encode("utf-8-sig"),
-        file_name="data.csv",
+        data=result.to_csv(index=False).encode("utf-8-sig"),
+        file_name="sorted_data.csv",
         mime="text/csv"
     )
+else:
+    st.error("Unnamed: 7 컬럼이 없음")
