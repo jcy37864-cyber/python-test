@@ -1,52 +1,74 @@
 import streamlit as st
+import pandas as pd
+from io import BytesIO
 
-st.set_page_config(page_title="ZXY 변환기", layout="centered")
+st.set_page_config(page_title="ZXY 변환기", layout="wide")
 
 st.title("Z → X → Y 세로 변환기")
 
-st.write("각 값들을 ,(콤마)로 구분해서 입력하세요")
-st.write("예: 1,4,6")
+# ✅ 초기 데이터 (100행)
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame({
+        "X": [""] * 100,
+        "Y": [""] * 100,
+        "Z": [""] * 100,
+    })
 
-# ✅ 입력 (절대 안 튕김)
-x_input = st.text_input("X 값", "")
-y_input = st.text_input("Y 값", "")
-z_input = st.text_input("Z 값", "")
+# ✅ 입력 테이블 (안 튕기게)
+edited_df = st.data_editor(
+    st.session_state.df,
+    use_container_width=True,
+    num_rows="fixed"   # 🔥 중요 (안정성)
+)
 
-# 문자열 → 리스트 변환
-def parse(text):
-    if not text.strip():
-        return []
-    return [v.strip() for v in text.split(",")]
+# 👉 입력 저장만 (계산 X)
+st.session_state.df = edited_df
 
-# 변환 버튼
-if st.button("변환 실행"):
+# 🔥 결과 생성 버튼
+if st.button("결과 생성"):
 
-    X = parse(x_input)
-    Y = parse(y_input)
-    Z = parse(z_input)
+    df = st.session_state.df.copy()
+    results = []
 
-    # 길이 맞추기 (가장 짧은 기준)
-    length = min(len(X), len(Y), len(Z))
+    for _, row in df.iterrows():
+        x = str(row.get("X", "")).strip()
+        y = str(row.get("Y", "")).strip()
+        z = str(row.get("Z", "")).strip()
 
-    result = []
+        # 값이 다 있을 때만 처리
+        if x and y and z:
+            results.extend([z, x, y])  # 🔥 Z → X → Y
 
-    # 🔥 핵심: Z → X → Y 순서로 세로 쌓기
-    for i in range(length):
-        result.append(Z[i])
-        result.append(X[i])
-        result.append(Y[i])
-
-    # 결과 출력
     st.subheader("결과 (세로 출력)")
-    for r in result:
+
+    # 👉 화면 출력
+    for r in results:
         st.write(r)
 
-    # CSV 다운로드 (줄바꿈 형태)
-    csv_data = "\n".join(result)
+    # =========================
+    # 📥 CSV 다운로드
+    # =========================
+    csv_data = "\n".join(results)
 
     st.download_button(
         label="CSV 다운로드",
         data=csv_data,
         file_name="zxy_result.csv",
         mime="text/csv"
+    )
+
+    # =========================
+    # 📥 엑셀 다운로드 (.xlsx)
+    # =========================
+    output = BytesIO()
+    df_result = pd.DataFrame(results, columns=["결과"])
+
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_result.to_excel(writer, index=False)
+
+    st.download_button(
+        label="엑셀 다운로드",
+        data=output.getvalue(),
+        file_name="zxy_result.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
