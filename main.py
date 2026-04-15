@@ -6,7 +6,13 @@ df = pd.read_excel("data.xlsm")
 st.title("데이터 입력")
 
 edited_df = st.data_editor(df)
-
+edited_df["Unnamed: 7"] = edited_df.apply(
+    lambda row: row["Z"] if str(row["변환값"]).strip().upper() == "Z"
+    else row["X"] if str(row["변환값"]).strip().upper() == "X"
+    else row["Y"] if str(row["변환값"]).strip().upper() == "Y"
+    else None,
+    axis=1
+)
 if st.button("저장"):
 
     # 🔥 Unnamed: 7 자동 생성 (핵심)
