@@ -1,32 +1,38 @@
 import streamlit as st
 import pandas as pd
 
-# 엑셀 불러오기
 df = pd.read_excel("data.xlsm")
 
 st.title("데이터 입력")
 
-# 데이터 수정
 edited_df = st.data_editor(df)
 
-# 저장 버튼
 if st.button("저장"):
+
+    # 🔥 Unnamed: 7 자동 생성 (핵심)
+    edited_df["Unnamed: 7"] = edited_df.apply(
+        lambda row: row["Z"] if row["변환값"] == "Z"
+        else row["X"] if row["변환값"] == "X"
+        else row["Y"] if row["변환값"] == "Y"
+        else None,
+        axis=1
+    )
+
+    # 저장
     edited_df.to_excel("data.xlsm", index=False)
     st.success("저장 완료!")
 
-# 🔽 Unnamed: 7 컬럼 그대로 표시 (정렬 없음)
+# 결과 표시
 if "Unnamed: 7" in edited_df.columns:
     result = edited_df[["Unnamed: 7"]]
 
-    st.subheader("결과 (입력 순서 그대로)")
+    st.subheader("결과")
     st.dataframe(result)
 
-    # 다운로드 버튼
+    # 🔽 다운로드 버튼 추가 (여기 중요)
     st.download_button(
         label="다운로드",
         data=result.to_csv(index=False).encode("utf-8-sig"),
-        file_name="data.csv",
+        file_name="result.csv",
         mime="text/csv"
     )
-else:
-    st.error("Unnamed: 7 컬럼이 없음")
