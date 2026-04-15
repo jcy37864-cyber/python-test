@@ -3,58 +3,73 @@ import pandas as pd
 
 st.set_page_config(page_title="데이터 입력", layout="wide")
 
-# ✅ 최초 1회만 파일 로드
+# ✅ 최초 1회 로드
 if "df" not in st.session_state:
-    st.session_state.df = pd.read_excel("data.xlsm")
+    df = pd.read_excel("data.xlsm")
 
-# ✅ 계산 함수 (핵심)
-def calculate():
-    df = st.session_state.df
+    # 🔥 컬럼 이름 정리 (핵심)
+    df.rename(columns={
+        "Unnamed: 6": "선택값",
+        "Unnamed: 7": "결과"
+    }, inplace=True)
 
-    df["Unnamed: 7"] = df.apply(
-        lambda row: row["Z"] if str(row.get("변환값", "")).strip().upper() == "Z"
-        else row["X"] if str(row.get("변환값", "")).strip().upper() == "X"
-        else row["Y"] if str(row.get("변환값", "")).strip().upper() == "Y"
+    st.session_state.df = df
+
+# ✅ 계산 함수
+def calculate(df):
+    df["결과"] = df.apply(
+        lambda row: row["Z"] if str(row.get("선택값", "")).strip().upper() == "Z"
+        else row["X"] if str(row.get("선택값", "")).strip().upper() == "X"
+        else row["Y"] if str(row.get("선택값", "")).strip().upper() == "Y"
         else None,
         axis=1
     )
-
-# 👉 앱 시작할 때 1번 계산
-calculate()
+    return df
 
 st.title("데이터 입력")
 
-# ✅ 데이터 입력 UI (입력하면 자동 반영)
+# ✅ 데이터 입력 UI (드롭다운으로 오류 방지)
 edited_df = st.data_editor(
     st.session_state.df,
     use_container_width=True,
     num_rows="dynamic",
-    key="editor"
+    key="editor",
+    column_config={
+        "선택값": st.column_config.SelectboxColumn(
+            "선택값",
+            options=["X", "Y", "Z"]
+        )
+    }
 )
 
-# 👉 수정된 값 저장 (중요)
+# ✅ 수정된 값 저장
 st.session_state.df = edited_df
 
-# 👉 항상 다시 계산 (🔥 핵심)
-calculate()
+# 🔥 항상 계산 실행 (핵심)
+st.session_state.df = calculate(st.session_state.df)
 
-# ✅ 결과 출력
-st.subheader("결과 (Unnamed: 7)")
-st.dataframe(st.session_state.df[["Unnamed: 7"]], use_container_width=True)
+# ✅ 결과 표시
+st.subheader("결과")
+st.dataframe(st.session_state.df[["결과"]], use_container_width=True)
 
-# ✅ 저장 버튼
+# ✅ 전체 데이터도 보고 싶으면
+with st.expander("전체 데이터 보기"):
+    st.dataframe(st.session_state.df, use_container_width=True)
+
+# ✅ 엑셀 저장
 if st.button("엑셀 저장"):
-    st.session_state.df.to_excel("data.xlsm", index=False)
+    # 다시 원래 컬럼명으로 저장 (필요하면)
+    save_df = st.session_state.df.rename(columns={
+        "선택값": "Unnamed: 6",
+        "결과": "Unnamed: 7"
+    })
+    save_df.to_excel("data.xlsm", index=False)
     st.success("저장 완료!")
 
-# ✅ 다운로드 버튼
+# ✅ CSV 다운로드
 st.download_button(
     label="CSV 다운로드",
     data=st.session_state.df.to_csv(index=False).encode("utf-8-sig"),
     file_name="result.csv",
     mime="text/csv"
 )
-
-# 🔍 디버깅용 (필요하면 주석 해제)
-# st.write(st.session_state.df)
-# st.write(st.session_state.df.columns)
