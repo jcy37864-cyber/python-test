@@ -7,34 +7,29 @@ st.set_page_config(page_title="데이터 입력", layout="wide")
 if "df" not in st.session_state:
     df = pd.read_excel("data.xlsm")
 
-    # 🔥 컬럼 이름 정리 (핵심)
+    # 🔥 컬럼 이름 정리 (없으면 자동 생성)
     df.rename(columns={
         "Unnamed: 6": "선택값",
         "Unnamed: 7": "결과"
     }, inplace=True)
 
-    st.session_state.df = df
+    if "결과" not in df.columns:
+        df["결과"] = None
 
-# ✅ 계산 함수
-def calculate(df):
-    df["결과"] = df.apply(
-        lambda row: row["Z"] if str(row.get("선택값", "")).strip().upper() == "Z"
-        else row["X"] if str(row.get("선택값", "")).strip().upper() == "X"
-        else row["Y"] if str(row.get("선택값", "")).strip().upper() == "Y"
-        else None,
-        axis=1
-    )
-    return df
+    st.session_state.df = df
 
 st.title("데이터 입력")
 
-# ✅ 데이터 입력 UI (드롭다운으로 오류 방지)
+# ✅ 입력 UI (숫자 수정 문제 해결 + 드롭다운)
 edited_df = st.data_editor(
     st.session_state.df,
     use_container_width=True,
     num_rows="dynamic",
     key="editor",
     column_config={
+        "X": st.column_config.NumberColumn(required=False),
+        "Y": st.column_config.NumberColumn(required=False),
+        "Z": st.column_config.NumberColumn(required=False),
         "선택값": st.column_config.SelectboxColumn(
             "선택값",
             options=["X", "Y", "Z"]
@@ -42,34 +37,52 @@ edited_df = st.data_editor(
     }
 )
 
-# ✅ 수정된 값 저장
+# ✅ 수정 데이터 저장
 st.session_state.df = edited_df
+df = st.session_state.df
 
-# 🔥 항상 계산 실행 (핵심)
-st.session_state.df = calculate(st.session_state.df)
+# 🔥 Z → X → Y 순서로 결과 생성
+def make_result(df):
+    values = []
 
-# ✅ 결과 표시
-st.subheader("결과")
-st.dataframe(st.session_state.df[["결과"]], use_container_width=True)
+    for _, row in df.iterrows():
+        values.extend([
+            row.get("Z"),
+            row.get("X"),
+            row.get("Y")
+        ])
 
-# ✅ 전체 데이터도 보고 싶으면
-with st.expander("전체 데이터 보기"):
-    st.dataframe(st.session_state.df, use_container_width=True)
+    # 데이터 길이에 맞게 자르기
+    values = values[:len(df)]
+
+    df["결과"] = values
+    return df
+
+# 항상 계산
+df = make_result(df)
+st.session_state.df = df
+
+# ✅ 결과 출력
+st.subheader("결과 (Z → X → Y 순)")
+st.dataframe(df, use_container_width=True)
 
 # ✅ 엑셀 저장
 if st.button("엑셀 저장"):
-    # 다시 원래 컬럼명으로 저장 (필요하면)
-    save_df = st.session_state.df.rename(columns={
+    save_df = df.rename(columns={
         "선택값": "Unnamed: 6",
         "결과": "Unnamed: 7"
     })
     save_df.to_excel("data.xlsm", index=False)
     st.success("저장 완료!")
 
-# ✅ CSV 다운로드
+# ✅ 다운로드
 st.download_button(
     label="CSV 다운로드",
-    data=st.session_state.df.to_csv(index=False).encode("utf-8-sig"),
+    data=df.to_csv(index=False).encode("utf-8-sig"),
     file_name="result.csv",
     mime="text/csv"
 )
+
+# 🔍 디버깅 필요하면 사용
+# st.write(df.columns)
+# st.write(df)
