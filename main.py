@@ -6,7 +6,7 @@ st.set_page_config(page_title="ZXY 변환기", layout="wide")
 
 st.title("Z → X → Y 변환기")
 
-# 👉 화면 반으로 나누기
+# 👉 화면 반 나누기
 col1, col2 = st.columns([1, 1])
 
 # =========================
@@ -16,7 +16,6 @@ with col1:
 
     st.subheader("데이터 입력")
 
-    # 초기 데이터
     if "df" not in st.session_state:
         st.session_state.df = pd.DataFrame({
             "X": [""] * 100,
@@ -54,8 +53,7 @@ with col1:
         st.download_button(
             "CSV 다운로드",
             data=csv_data,
-            file_name="zxy_result.csv",
-            mime="text/csv"
+            file_name="zxy_result.csv"
         )
 
         # 엑셀 다운로드
@@ -68,26 +66,43 @@ with col1:
         st.download_button(
             "엑셀 다운로드",
             data=output.getvalue(),
-            file_name="zxy_result.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            file_name="zxy_result.xlsx"
         )
 
 # =========================
-# 🧩 오른쪽: 확장 공간 (중요)
+# 🧩 오른쪽: 확장 + 토크 계산기
 # =========================
 with col2:
 
-    st.subheader("🧩 확장 공간 (여기에 기능 추가 예정)")
+    st.subheader("🧩 확장 공간")
 
-    st.write("👉 여기에 나중에 계산기, 자동화 기능 등을 추가할 수 있습니다.")
+    # 🔧 토크 변환기
+    st.markdown("### 🔧 토크 변환기")
 
-    # 🔥 핵심: 자유 입력 공간 (메모/설계용)
-    user_note = st.text_area(
-        "필요한 기능을 적어두세요",
-        placeholder="예: 평균 계산, 특정 조건 필터, 자동 변환 등...",
-        height=300
+    torque_value = st.number_input("값 입력", value=0.0)
+
+    conversion_type = st.selectbox(
+        "변환 선택",
+        ["N·m → kgf·m", "kgf·m → N·m"]
     )
 
-    # 👉 임시 저장 느낌
-    if st.button("메모 저장"):
-        st.success("저장됨 (임시)")
+    if st.button("변환 실행"):
+
+        if conversion_type == "N·m → kgf·m":
+            result = torque_value * 0.101972
+            st.success(f"{result:.4f} kgf·m")
+
+        else:
+            result = torque_value * 9.80665
+            st.success(f"{result:.4f} N·m")
+
+    st.markdown("---")
+
+    # 📝 메모 공간 (유지)
+    st.markdown("### 📝 메모")
+
+    note = st.text_area(
+        "필요한 기능 기록",
+        placeholder="여기에 다음에 만들 기능 적기",
+        height=200
+    )
