@@ -6,7 +6,7 @@ st.set_page_config(page_title="ZXY 변환기", layout="wide")
 
 st.title("Z → X → Y 세로 변환기")
 
-# ✅ 초기 데이터 (100행)
+# ✅ 초기 데이터 (한 번만 생성)
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame({
         "X": [""] * 100,
@@ -14,60 +14,58 @@ if "df" not in st.session_state:
         "Z": [""] * 100,
     })
 
-# ✅ 입력 테이블 (안 튕기게)
+# ✅ data_editor는 key만 사용 (🔥 핵심)
 edited_df = st.data_editor(
     st.session_state.df,
+    num_rows="fixed",
     use_container_width=True,
-    num_rows="fixed"   # 🔥 중요 (안정성)
+    key="editor"
 )
 
-# 👉 입력 저장만 (계산 X)
-st.session_state.df = edited_df
-
-# 🔥 결과 생성 버튼
+# 🔥 버튼 눌렀을 때만 저장 + 계산
 if st.button("결과 생성"):
 
-    df = st.session_state.df.copy()
+    df = edited_df.copy()   # 👉 여기서만 사용
+
     results = []
 
     for _, row in df.iterrows():
-        x = str(row.get("X", "")).strip()
-        y = str(row.get("Y", "")).strip()
-        z = str(row.get("Z", "")).strip()
+        x = str(row["X"]).strip()
+        y = str(row["Y"]).strip()
+        z = str(row["Z"]).strip()
 
-        # 값이 다 있을 때만 처리
         if x and y and z:
-            results.extend([z, x, y])  # 🔥 Z → X → Y
+            results.extend([z, x, y])
 
-    st.subheader("결과 (세로 출력)")
+    st.subheader("결과")
 
-    # 👉 화면 출력
+    # 👉 출력
     for r in results:
         st.write(r)
 
-    # =========================
-    # 📥 CSV 다운로드
-    # =========================
+    # =====================
+    # CSV 다운로드
+    # =====================
     csv_data = "\n".join(results)
 
     st.download_button(
-        label="CSV 다운로드",
+        "CSV 다운로드",
         data=csv_data,
         file_name="zxy_result.csv",
         mime="text/csv"
     )
 
-    # =========================
-    # 📥 엑셀 다운로드 (.xlsx)
-    # =========================
+    # =====================
+    # 엑셀 다운로드 (openpyxl 사용)
+    # =====================
     output = BytesIO()
     df_result = pd.DataFrame(results, columns=["결과"])
 
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_result.to_excel(writer, index=False)
 
     st.download_button(
-        label="엑셀 다운로드",
+        "엑셀 다운로드",
         data=output.getvalue(),
         file_name="zxy_result.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
