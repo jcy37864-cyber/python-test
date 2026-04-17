@@ -3,8 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 
-# 다크 UI 유지
-st.set_page_config(page_title="품질 측정 도구", layout="wide")
+st.set_page_config(page_title="품질 측정 통합 프로그램", layout="wide")
 
 st.title("📊 품질 측정 통합 프로그램")
 
@@ -18,16 +17,16 @@ with col1:
     st.subheader("🔄 변환기")
 
     selected = st.selectbox(
-        "변환기 선택",
+        "선택",
         ["ZXY 변환", "토크 변환"]
     )
 
     # ---------------------
-    # ✅ ZXY 변환 (정상 복구)
+    # 🔥 ZXY 변환 (완전 복구)
     # ---------------------
     if selected == "ZXY 변환":
 
-        st.markdown("### 📋 엑셀처럼 입력 (복사 붙여넣기 가능)")
+        st.markdown("### 📋 데이터 입력 (엑셀처럼 복붙 가능)")
 
         if "df" not in st.session_state:
             st.session_state.df = pd.DataFrame({
@@ -38,8 +37,7 @@ with col1:
 
         edited_df = st.data_editor(
             st.session_state.df,
-            use_container_width=True,
-            key="editor_zxy"
+            use_container_width=True
         )
 
         if st.button("ZXY 생성"):
@@ -57,39 +55,31 @@ with col1:
             if len(results) == 0:
                 st.warning("데이터 없음")
             else:
-                st.subheader("결과 (세로 출력)")
+                st.subheader("결과 (세로)")
 
                 result_df = pd.DataFrame(results, columns=["결과"])
                 st.dataframe(result_df, use_container_width=True)
 
                 # CSV 다운로드
                 csv = result_df.to_csv(index=False).encode("utf-8-sig")
-                st.download_button(
-                    "CSV 다운로드",
-                    data=csv,
-                    file_name="zxy_result.csv"
-                )
+                st.download_button("CSV 다운로드", csv, "zxy.csv")
 
                 # 엑셀 다운로드
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
                     result_df.to_excel(writer, index=False)
 
-                st.download_button(
-                    "엑셀 다운로드",
-                    data=output.getvalue(),
-                    file_name="zxy_result.xlsx"
-                )
+                st.download_button("엑셀 다운로드", output.getvalue(), "zxy.xlsx")
 
     # ---------------------
-    # 토크 변환
+    # 🔩 토크 변환
     # ---------------------
     elif selected == "토크 변환":
 
         val = st.number_input("값 입력", value=0.0)
 
         mode = st.selectbox(
-            "변환 선택",
+            "변환",
             ["N·m → kgf·m", "kgf·m → N·m"]
         )
 
@@ -100,7 +90,7 @@ with col1:
 
 
 # =========================
-# 📈 그래프 + 계산기
+# 📈 그래프 + 계산기 영역
 # =========================
 with col2:
 
@@ -113,7 +103,7 @@ with col2:
 
         st.subheader("📈 품질 데이터 그래프")
 
-        st.markdown("### 📋 MIN / MAX / VALUE 입력")
+        st.markdown("### 📋 입력 형식: MIN / MAX / VALUE")
 
         if "graph_df" not in st.session_state:
             st.session_state.graph_df = pd.DataFrame({
@@ -142,16 +132,17 @@ with col2:
                     axis=1
                 )
 
+                # 결과 테이블
                 st.dataframe(df, use_container_width=True)
 
+                # 그래프
                 fig, ax = plt.subplots()
 
-                # 선 연결
                 ax.plot(df["VALUE"].values, marker='o', label="VALUE")
                 ax.plot(df["MIN"].values, linestyle='--', label="MIN")
                 ax.plot(df["MAX"].values, linestyle='--', label="MAX")
 
-                # NG 강조 (빨간 점 느낌)
+                # NG 강조
                 for i, row in df.iterrows():
                     if row["판정"] == "NG":
                         ax.scatter(i, row["VALUE"], s=100)
@@ -162,12 +153,13 @@ with col2:
 
                 st.pyplot(fig)
 
+                # 요약
                 total = len(df)
                 ng = len(df[df["판정"] == "NG"])
 
                 st.success(f"총 {total}개 중 NG {ng}개")
 
-            except:
+            except Exception as e:
                 st.error("데이터 오류")
 
     # ---------------------
@@ -178,8 +170,8 @@ with col2:
         st.subheader("🧮 계산기")
 
         calc = st.selectbox(
-            "계산기 선택",
-            ["합계", "평균/통계", "공차 판정", "길이 변환"]
+            "선택",
+            ["합계", "평균", "공차 판정", "길이 변환"]
         )
 
         if calc == "합계":
@@ -187,14 +179,12 @@ with col2:
             b = st.number_input("B", value=0.0)
             st.success(f"결과: {a + b}")
 
-        elif calc == "평균/통계":
+        elif calc == "평균":
             nums = st.text_input("숫자 입력", "1,2,3")
 
             try:
                 values = [float(x.strip()) for x in nums.split(",")]
-                avg = sum(values) / len(values)
-                st.success(f"평균: {avg:.4f}")
-                st.info(f"최대: {max(values)} / 최소: {min(values)}")
+                st.success(f"평균: {sum(values)/len(values):.4f}")
             except:
                 st.error("입력 오류")
 
