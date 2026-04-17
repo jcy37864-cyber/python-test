@@ -1,212 +1,116 @@
-import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from io import BytesIO
-import platform
 
-# =========================
-# 🔥 폰트 설정 (한글 깨짐 방지)
-# =========================
-if platform.system() == 'Windows':
-    plt.rcParams['font.family'] = 'Malgun Gothic'
+# -----------------------------
+# ✅ 한글 폰트 (Streamlit / 서버 대응)
+# -----------------------------
+import matplotlib
+matplotlib.rcParams['font.family'] = 'DejaVu Sans'  # 기본 (서버용)
+matplotlib.rcParams['axes.unicode_minus'] = False
+
+# -----------------------------
+# ✅ 데이터 (엑셀 연동 시 교체)
+# -----------------------------
+df = pd.read_excel("data.xlsx")  # 너 파일명 맞춰
+
+# 컬럼명 맞추기
+# df.columns = ['핀', '측정값', 'Min', 'Max']
+
+# -----------------------------
+# ✅ 정규화 (핵심)
+# -----------------------------
+center = (df['Min'] + df['Max']) / 2
+half_range = (df['Max'] - df['Min']) / 2
+df['편차'] = (df['측정값'] - center) / half_range * 100
+
+# -----------------------------
+# ✅ 경향선 (이동평균)
+# -----------------------------
+df['경향'] = df['편차'].rolling(window=3, min_periods=1).mean()
+
+# -----------------------------
+# ✅ 자동 분석 (차별화 핵심🔥)
+# -----------------------------
+trend_slope = np.polyfit(df['핀'], df['편차'], 1)[0]
+
+if trend_slope > 2:
+    trend_msg = "➡️ 뒤쪽 핀으로 갈수록 증가 (공정 밀림 가능)"
+elif trend_slope < -2:
+    trend_msg = "⬅️ 앞쪽 핀으로 갈수록 증가"
 else:
-    plt.rcParams['font.family'] = 'DejaVu Sans'
+    trend_msg = "➡️ 큰 경향 없음"
 
-plt.rcParams['axes.unicode_minus'] = False
+out_of_spec = df[(df['편차'].abs() > 100)]
 
-st.set_page_config(page_title="품질 측정 프로그램", layout="wide")
+# -----------------------------
+# ✅ 그래프
+# -----------------------------
+plt.figure(figsize=(12,6))
 
-st.title("📊 품질 측정 통합 프로그램")
+# 🔵 배경 영역
+plt.axhspan(-100, 100, alpha=0.05)
+plt.axhspan(-100, -80, color='red', alpha=0.15)
+plt.axhspan(80, 100, color='red', alpha=0.15)
+plt.axhspan(-80, 80, color='green', alpha=0.1)
 
-# =========================
-# 🔥 좌우 분할
-# =========================
-left, right = st.columns([2, 1])
+# -----------------------------
+# ✅ 점 색상 (이상 강조)
+# -----------------------------
+colors = []
+for val in df['편차']:
+    if abs(val) > 100:
+        colors.append('red')
+    elif abs(val) > 80:
+        colors.append('orange')
+    else:
+        colors.append('gray')
 
-# =========================
-# 🔥 왼쪽: 메인
-# =========================
-with left:
+plt.scatter(df['핀'], df['편차'], c=colors, s=60, zorder=3)
 
-    app_mode = st.selectbox(
-        "프로그램 선택",
-        ["ZXY 변환", "통계 / 그래프"]
-    )
+# -----------------------------
+# ✅ 경향선 (굵게)
+# -----------------------------
+plt.plot(df['핀'], df['경향'], linewidth=3, zorder=2)
 
-    # =========================
-    # 🔄 ZXY 변환
-    # =========================
-    if app_mode == "ZXY 변환":
+# -----------------------------
+# ✅ 기준선
+# -----------------------------
+plt.axhline(0, linestyle='--')
+plt.axhline(100, linestyle='--')
+plt.axhline(-100, linestyle='--')
 
-        st.subheader("🔄 ZXY 변환")
+# -----------------------------
+# ❌ 범례 제거 → 직접 표시
+# -----------------------------
+plt.text(df['핀'].max()+0.5, 0, '중심', va='center')
+plt.text(df['핀'].max()+0.5, 100, '상한', va='center')
+plt.text(df['핀'].max()+0.5, -100, '하한', va='center')
 
-        if "zxy_df" not in st.session_state:
-            st.session_state.zxy_df = pd.DataFrame({
-                "X": [""] * 50,
-                "Y": [""] * 50,
-                "Z": [""] * 50
-            })
+# -----------------------------
+# 🔥 핵심: 자동 해석 문구
+# -----------------------------
+plt.title(f'핀 위치별 치수 경향 분석\n{trend_msg}', fontsize=14)
 
-        edited_df = st.data_editor(
-            st.session_state.zxy_df,
-            use_container_width=True
-        )
+# -----------------------------
+# ✅ 축
+# -----------------------------
+plt.xlabel('핀 위치')
+plt.ylabel('편차 (%)')
 
-        if st.button("변환 실행"):
-            results = []
+plt.ylim(-120, 120)
+plt.grid(alpha=0.3)
 
-            for _, row in edited_df.iterrows():
-                x = str(row["X"]).strip()
-                y = str(row["Y"]).strip()
-                z = str(row["Z"]).strip()
+plt.tight_layout()
+plt.show()
 
-                if x and y and z:
-                    results.extend([z, x, y])
+# -----------------------------
+# 🔥 콘솔 출력 (보고서용)
+# -----------------------------
+print("===== 분석 결과 =====")
+print(trend_msg)
 
-            if len(results) == 0:
-                st.warning("데이터 없음")
-            else:
-                result_df = pd.DataFrame(results, columns=["결과"])
-
-                st.subheader("결과")
-                st.dataframe(result_df, use_container_width=True)
-
-                csv = result_df.to_csv(index=False).encode("utf-8-sig")
-                st.download_button("CSV 다운로드", csv, "zxy_result.csv")
-
-    # =========================
-    # 📈 통계 / 그래프
-    # =========================
-    elif app_mode == "통계 / 그래프":
-
-        st.subheader("📈 통계 / 그래프")
-
-        file = st.file_uploader("엑셀 업로드", type=["xlsx"])
-
-        # 템플릿 (MIN → MAX → VALUE)
-        template = pd.DataFrame({
-            "MIN": [30.25, 30.25, 30.25],
-            "MAX": [30.70, 30.70, 30.70],
-            "VALUE": [30.5, 30.4, 30.6]
-        })
-
-        buf = BytesIO()
-        template.to_excel(buf, index=False)
-
-        st.download_button("📥 템플릿 다운로드", buf.getvalue(), "template.xlsx")
-
-        if file:
-            df = pd.read_excel(file)
-            st.dataframe(df, use_container_width=True)
-
-            min_col = st.selectbox("MIN", df.columns)
-            max_col = st.selectbox("MAX", df.columns)
-            value_col = st.selectbox("VALUE", df.columns)
-
-            try:
-                mins = df[min_col].astype(float)
-                maxs = df[max_col].astype(float)
-                values = df[value_col].astype(float)
-
-                avg = values.mean()
-
-                df_result = pd.DataFrame({
-                    "MIN": mins,
-                    "MAX": maxs,
-                    "VALUE": values
-                })
-
-                df_result["판정"] = df_result.apply(
-                    lambda r: "NG" if r["VALUE"] < r["MIN"] or r["VALUE"] > r["MAX"] else "OK",
-                    axis=1
-                )
-
-                ng = (df_result["판정"] == "NG").sum()
-                total = len(df_result)
-
-                # =========================
-                # 📊 상태 요약
-                # =========================
-                st.subheader("📊 상태 요약")
-
-                if ng == 0:
-                    st.success("✅ 전체 양호")
-                else:
-                    st.error(f"❌ NG {ng}개 발생")
-
-                if avg < mins.iloc[0]:
-                    st.warning("⬇ 전체적으로 낮은 경향")
-                elif avg > maxs.iloc[0]:
-                    st.warning("⬆ 전체적으로 높은 경향")
-                else:
-                    st.info("✔ 공차 범위 내 안정")
-
-                # =========================
-                # 📈 그래프 (핵심)
-                # =========================
-                fig, ax = plt.subplots()
-
-                x = range(len(values))
-
-                # 흐름선
-                ax.plot(x, values, linewidth=2)
-
-                # 공차 영역
-                ax.fill_between(
-                    x,
-                    mins.iloc[0],
-                    maxs.iloc[0],
-                    alpha=0.15
-                )
-
-                # NG 강조
-                ng_index = df_result[df_result["판정"] == "NG"].index
-                ax.scatter(ng_index, values.iloc[ng_index], s=60)
-
-                # 평균선
-                ax.axhline(avg, linestyle="--")
-
-                ax.set_title("Measurement Trend")
-
-                st.pyplot(fig)
-
-            except Exception as e:
-                st.error(f"데이터 오류: {e}")
-
-# =========================
-# 🔧 오른쪽: 계산기
-# =========================
-with right:
-
-    st.subheader("🔧 계산 도구")
-
-    tool = st.selectbox(
-        "선택",
-        ["토크 변환", "공차 계산"]
-    )
-
-    # 토크 변환
-    if tool == "토크 변환":
-        val = st.number_input("값", value=0.0)
-
-        mode = st.radio(
-            "변환",
-            ["N·m → kgf·cm", "kgf·cm → N·m"]
-        )
-
-        if mode == "N·m → kgf·cm":
-            res = val * 10.1972
-        else:
-            res = val / 10.1972
-
-        st.success(f"결과: {res:.3f}")
-
-    # 공차 계산
-    elif tool == "공차 계산":
-        t = st.number_input("목표값", value=0.0)
-        u = st.number_input("상한", value=0.0)
-        l = st.number_input("하한", value=0.0)
-
-        st.write(f"공차: {u-l}")
-        st.write(f"+편차: {u-t}")
-        st.write(f"-편차: {t-l}")
+if len(out_of_spec) > 0:
+    print(f"❌ 불량 핀: {list(out_of_spec['핀'])}")
+else:
+    print("✅ 전체 정상 범위")
