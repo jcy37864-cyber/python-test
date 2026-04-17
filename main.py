@@ -5,7 +5,7 @@ from io import BytesIO
 import platform
 
 # =========================
-# 🔥 한글 폰트 자동 설정
+# 🔥 폰트 설정 (한글 깨짐 방지)
 # =========================
 if platform.system() == 'Windows':
     plt.rcParams['font.family'] = 'Malgun Gothic'
@@ -24,7 +24,7 @@ st.title("📊 품질 측정 통합 프로그램")
 left, right = st.columns([2, 1])
 
 # =========================
-# 🔥 왼쪽: 메인 기능
+# 🔥 왼쪽: 메인
 # =========================
 with left:
 
@@ -38,7 +38,7 @@ with left:
     # =========================
     if app_mode == "ZXY 변환":
 
-        st.subheader("🔄 ZXY 변환 (직접 입력)")
+        st.subheader("🔄 ZXY 변환")
 
         if "zxy_df" not in st.session_state:
             st.session_state.zxy_df = pd.DataFrame({
@@ -79,34 +79,29 @@ with left:
     # =========================
     elif app_mode == "통계 / 그래프":
 
-        st.subheader("📈 통계 / 그래프 (엑셀 업로드)")
+        st.subheader("📈 통계 / 그래프")
 
         file = st.file_uploader("엑셀 업로드", type=["xlsx"])
 
-        # ✅ 템플릿 (MIN → MAX → VALUE)
+        # 템플릿 (MIN → MAX → VALUE)
         template = pd.DataFrame({
-            "MIN": [9.5, 9.5, 9.5],
-            "MAX": [10.5, 10.5, 10.5],
-            "VALUE": [10.1, 9.9, 10.3]
+            "MIN": [30.25, 30.25, 30.25],
+            "MAX": [30.70, 30.70, 30.70],
+            "VALUE": [30.5, 30.4, 30.6]
         })
 
         buf = BytesIO()
         template.to_excel(buf, index=False)
 
-        st.download_button(
-            "📥 템플릿 다운로드",
-            buf.getvalue(),
-            "template.xlsx"
-        )
+        st.download_button("📥 템플릿 다운로드", buf.getvalue(), "template.xlsx")
 
         if file:
             df = pd.read_excel(file)
             st.dataframe(df, use_container_width=True)
 
-            # 🔥 컬럼 선택
-            min_col = st.selectbox("MIN 컬럼 선택", df.columns)
-            max_col = st.selectbox("MAX 컬럼 선택", df.columns)
-            value_col = st.selectbox("VALUE 컬럼 선택", df.columns)
+            min_col = st.selectbox("MIN", df.columns)
+            max_col = st.selectbox("MAX", df.columns)
+            value_col = st.selectbox("VALUE", df.columns)
 
             try:
                 mins = df[min_col].astype(float)
@@ -115,7 +110,6 @@ with left:
 
                 avg = values.mean()
 
-                # 결과 테이블
                 df_result = pd.DataFrame({
                     "MIN": mins,
                     "MAX": maxs,
@@ -130,41 +124,49 @@ with left:
                 ng = (df_result["판정"] == "NG").sum()
                 total = len(df_result)
 
-                st.success(f"평균: {avg:.4f}")
-                st.warning(f"NG 개수: {ng} / {total} (불량률 {ng/total*100:.1f}%)")
+                # =========================
+                # 📊 상태 요약
+                # =========================
+                st.subheader("📊 상태 요약")
 
-                # 🔥 NG 행 강조
-                def highlight_row(row):
-                    if row["판정"] == "NG":
-                        return ["background-color:red;color:white"] * len(row)
-                    return [""] * len(row)
+                if ng == 0:
+                    st.success("✅ 전체 양호")
+                else:
+                    st.error(f"❌ NG {ng}개 발생")
 
-                st.dataframe(
-                    df_result.style.apply(highlight_row, axis=1),
-                    use_container_width=True
-                )
+                if avg < mins.iloc[0]:
+                    st.warning("⬇ 전체적으로 낮은 경향")
+                elif avg > maxs.iloc[0]:
+                    st.warning("⬆ 전체적으로 높은 경향")
+                else:
+                    st.info("✔ 공차 범위 내 안정")
 
                 # =========================
-                # 🔥 그래프 (완전 수정)
+                # 📈 그래프 (핵심)
                 # =========================
                 fig, ax = plt.subplots()
 
-                ok = df_result[df_result["판정"] == "OK"]
-                ngv = df_result[df_result["판정"] == "NG"]
+                x = range(len(values))
 
-                # OK / NG 분리 표시
-                ax.scatter(ok.index, ok["VALUE"], label="OK")
-                ax.scatter(ngv.index, ngv["VALUE"], label="NG")
+                # 흐름선
+                ax.plot(x, values, linewidth=2)
+
+                # 공차 영역
+                ax.fill_between(
+                    x,
+                    mins.iloc[0],
+                    maxs.iloc[0],
+                    alpha=0.15
+                )
+
+                # NG 강조
+                ng_index = df_result[df_result["판정"] == "NG"].index
+                ax.scatter(ng_index, values.iloc[ng_index], s=60)
 
                 # 평균선
-                ax.axhline(avg, linestyle="--", label="AVG")
+                ax.axhline(avg, linestyle="--")
 
-                # ✅ 공차선 (핵심 수정!)
-                ax.axhline(mins.iloc[0], linestyle="--", label="MIN")
-                ax.axhline(maxs.iloc[0], linestyle="--", label="MAX")
-
-                ax.set_title("측정값 분포 (NG 강조)")
-                ax.legend()
+                ax.set_title("Measurement Trend")
 
                 st.pyplot(fig)
 
@@ -172,47 +174,39 @@ with left:
                 st.error(f"데이터 오류: {e}")
 
 # =========================
-# 🔧 오른쪽: 계산 기능
+# 🔧 오른쪽: 계산기
 # =========================
 with right:
 
-    st.subheader("🔧 계산 / 변환 도구")
+    st.subheader("🔧 계산 도구")
 
     tool = st.selectbox(
-        "도구 선택",
+        "선택",
         ["토크 변환", "공차 계산"]
     )
 
-    # 🔩 토크 변환
+    # 토크 변환
     if tool == "토크 변환":
-
-        st.markdown("### 🔩 토크 변환")
-
-        value = st.number_input("값 입력", value=0.0)
+        val = st.number_input("값", value=0.0)
 
         mode = st.radio(
-            "변환 선택",
+            "변환",
             ["N·m → kgf·cm", "kgf·cm → N·m"]
         )
 
         if mode == "N·m → kgf·cm":
-            result = value * 10.1972
+            res = val * 10.1972
         else:
-            result = value / 10.1972
+            res = val / 10.1972
 
-        st.success(f"결과: {result:.4f}")
+        st.success(f"결과: {res:.3f}")
 
-    # 📏 공차 계산
+    # 공차 계산
     elif tool == "공차 계산":
+        t = st.number_input("목표값", value=0.0)
+        u = st.number_input("상한", value=0.0)
+        l = st.number_input("하한", value=0.0)
 
-        st.markdown("### 📏 공차 계산")
-
-        target = st.number_input("목표값", value=0.0)
-        upper = st.number_input("상한", value=0.0)
-        lower = st.number_input("하한", value=0.0)
-
-        tol = upper - lower
-
-        st.info(f"공차: {tol}")
-        st.write(f"+편차: {upper - target}")
-        st.write(f"-편차: {target - lower}")
+        st.write(f"공차: {u-l}")
+        st.write(f"+편차: {u-t}")
+        st.write(f"-편차: {t-l}")
