@@ -6,65 +6,56 @@ import numpy as np
 st.set_page_config(layout="wide")
 
 # -------------------------------
-# 🔥 UI 스타일 개선
+# 🔥 UI 스타일 최종
 # -------------------------------
 st.markdown("""
 <style>
 
-/* 사이드바 배경 */
+/* 사이드바 */
 section[data-testid="stSidebar"] {
     background-color: #111827;
 }
 
-/* 사이드바 제목 */
-section[data-testid="stSidebar"] label {
+/* 사이드바 텍스트 */
+section[data-testid="stSidebar"] * {
     color: white !important;
-    font-size: 18px !important;
-    font-weight: bold;
 }
 
-/* 라디오 버튼 텍스트 */
+/* 라디오 버튼 */
 div[role="radiogroup"] label {
-    color: white !important;
-    font-size: 16px !important;
+    font-size: 16px;
     background-color: #1f2937;
-    padding: 8px;
-    border-radius: 6px;
+    padding: 10px;
+    border-radius: 8px;
     margin-bottom: 5px;
 }
 
-/* 선택된 메뉴 강조 */
+/* 선택 강조 */
 div[role="radiogroup"] label:has(input:checked) {
     background-color: #2563eb !important;
-    color: white !important;
     font-weight: bold;
 }
 
-/* selectbox 색상 구분 */
-div[data-testid="column"] > div:nth-child(1) {
-    background-color: #f0f9ff;
+/* 컬럼 박스 색상 */
+div[data-testid="column"]:nth-child(1) {
+    background-color: #e0f2fe;
     padding: 10px;
-    border-radius: 8px;
+    border-radius: 10px;
 }
-
-div[data-testid="column"] > div:nth-child(2) {
-    background-color: #fefce8;
+div[data-testid="column"]:nth-child(2) {
+    background-color: #fef9c3;
     padding: 10px;
-    border-radius: 8px;
+    border-radius: 10px;
 }
-
-div[data-testid="column"] > div:nth-child(3) {
-    background-color: #f0fdf4;
+div[data-testid="column"]:nth-child(3) {
+    background-color: #dcfce7;
     padding: 10px;
-    border-radius: 8px;
+    border-radius: 10px;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------------------
-# 제목
-# -------------------------------
 st.title("📊 품질 분석 시스템")
 
 # -------------------------------
@@ -80,13 +71,12 @@ menu = st.sidebar.radio(
 # -------------------------------
 if menu == "📊 통계 그래프":
 
-    st.warning("⚠️ 반드시 MIN / MAX / VALUE 컬럼을 확인하세요!")
+    st.warning("⚠️ 반드시 MIN / MAX / VALUE 컬럼 확인하세요!")
 
     uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
 
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
-
         st.dataframe(df)
 
         # 자동 컬럼 찾기
@@ -102,23 +92,9 @@ if menu == "📊 통계 그래프":
 
         col1, col2, col3 = st.columns(3)
 
-        min_col = col1.selectbox(
-            "🔵 MIN (선택)",
-            df.columns,
-            index=df.columns.get_loc(min_default)
-        )
-
-        max_col = col2.selectbox(
-            "🟡 MAX (선택)",
-            df.columns,
-            index=df.columns.get_loc(max_default)
-        )
-
-        val_col = col3.selectbox(
-            "🟢 VALUE (선택)",
-            df.columns,
-            index=df.columns.get_loc(val_default)
-        )
+        min_col = col1.selectbox("🔵 MIN (선택)", df.columns, index=df.columns.get_loc(min_default))
+        max_col = col2.selectbox("🟡 MAX (선택)", df.columns, index=df.columns.get_loc(max_default))
+        val_col = col3.selectbox("🟢 VALUE (선택)", df.columns, index=df.columns.get_loc(val_default))
 
         mins = pd.to_numeric(df[min_col], errors='coerce')
         maxs = pd.to_numeric(df[max_col], errors='coerce')
@@ -131,15 +107,36 @@ if menu == "📊 통계 그래프":
 
         fig, ax = plt.subplots(figsize=(14, 6))
 
-        ax.fill_between(x, mins, maxs, alpha=0.2, label="Spec Range")
+        # 공차 영역
+        ax.fill_between(x, mins, maxs, alpha=0.15, label="Spec Range")
+
+        # 트렌드 라인
         ax.plot(x, values, linewidth=2)
 
+        # 점
         ax.scatter(x[ok], values[ok], s=60, label="OK")
         ax.scatter(x[ng], values[ng], s=80, color='red', label="NG")
 
+        # 평균선
         avg = values.mean()
         ax.axhline(avg, linestyle='--', linewidth=2, label="AVG")
 
+        # 🔥 MIN / MAX 라인 + 숫자 표시
+        min_line = mins.mean()
+        max_line = maxs.mean()
+
+        ax.axhline(min_line, linestyle=':', linewidth=2)
+        ax.axhline(max_line, linestyle=':', linewidth=2)
+
+        ax.text(len(x)-1, min_line, f"MIN: {min_line:.3f}", color='blue', ha='right')
+        ax.text(len(x)-1, max_line, f"MAX: {max_line:.3f}", color='blue', ha='right')
+
+        # 🔥 NG 구간 빨간 박스
+        for i in range(len(values)):
+            if ng.iloc[i]:
+                ax.axvspan(i-0.5, i+0.5, color='red', alpha=0.15)
+
+        # Y축 자동
         low = min(values.min(), mins.min())
         high = max(values.max(), maxs.max())
         margin = (high - low) * 0.1
@@ -151,7 +148,9 @@ if menu == "📊 통계 그래프":
 
         st.pyplot(fig)
 
+        # -------------------------------
         # 분석
+        # -------------------------------
         st.subheader("📊 분석 결과")
 
         total = len(values)
@@ -163,8 +162,15 @@ if menu == "📊 통계 그래프":
         col2.metric("NG 개수", ng_count)
         col3.metric("NG 비율 (%)", f"{ng_rate:.2f}")
 
+        if ng_count == 0:
+            st.success("✅ 공정 안정")
+        elif ng_rate < 5:
+            st.warning("⚠️ 일부 NG 발생")
+        else:
+            st.error("🚨 공정 이상")
+
 # -------------------------------
-# ZXY
+# ZXY 변환
 # -------------------------------
 elif menu == "📐 ZXY 변환":
 
@@ -175,7 +181,7 @@ elif menu == "📐 ZXY 변환":
     st.write(f"Y: {z * 0.5:.3f}")
 
 # -------------------------------
-# 토크
+# 토크 변환
 # -------------------------------
 elif menu == "🔧 토크 변환":
 
