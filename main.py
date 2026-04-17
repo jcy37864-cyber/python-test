@@ -6,7 +6,7 @@ import numpy as np
 st.set_page_config(layout="wide")
 
 # -------------------------------
-# 🔥 UI 스타일
+# UI 스타일
 # -------------------------------
 st.markdown("""
 <style>
@@ -37,7 +37,7 @@ st.title("📊 품질 분석 시스템")
 # -------------------------------
 menu = st.sidebar.radio(
     "기능 선택",
-    ["📊 통계 그래프", "📐 ZXY 변환", "🧮 계산기"]
+    ["📊 통계 그래프", "📐 ZXY 정렬", "🧮 계산기"]
 )
 
 # -------------------------------
@@ -75,7 +75,7 @@ if menu == "📊 통계 그래프":
         ng = (values < mins) | (values > maxs)
         ok = ~ng
 
-        # 🔥 테이블 NG 강조
+        # NG 강조 테이블
         def highlight(row):
             if row[val_col] < row[min_col] or row[val_col] > row[max_col]:
                 return ["background-color: red"] * len(row)
@@ -83,7 +83,9 @@ if menu == "📊 통계 그래프":
 
         st.dataframe(df.style.apply(highlight, axis=1))
 
-        x = np.arange(len(values))
+        # 🔥 데이터 번호 1부터 시작
+        x = np.arange(1, len(values) + 1)
+
         fig, ax = plt.subplots(figsize=(14, 6))
 
         ax.fill_between(x, mins, maxs, alpha=0.15)
@@ -92,20 +94,20 @@ if menu == "📊 통계 그래프":
         ax.scatter(x[ok], values[ok])
         ax.scatter(x[ng], values[ng], color='red')
 
-        # 평균
+        # 평균선
         ax.axhline(values.mean(), linestyle='--')
 
-        # MIN MAX
+        # MIN MAX 표시
         min_line = mins.mean()
         max_line = maxs.mean()
 
         ax.axhline(min_line, linestyle=':')
         ax.axhline(max_line, linestyle=':')
 
-        ax.text(len(x)-1, min_line, f"MIN: {min_line:.3f}", ha='right')
-        ax.text(len(x)-1, max_line, f"MAX: {max_line:.3f}", ha='right')
+        ax.text(x[-1], min_line, f"MIN: {min_line:.3f}", ha='right')
+        ax.text(x[-1], max_line, f"MAX: {max_line:.3f}", ha='right')
 
-        # 🔥 최악 NG
+        # 최악 NG
         deviation = np.where(values < mins, mins - values, values - maxs)
         deviation = np.where(ng, deviation, 0)
 
@@ -113,33 +115,65 @@ if menu == "📊 통계 그래프":
             idx = np.argmax(deviation)
             val = values.iloc[idx]
 
-            ax.scatter(idx, val, color='red', s=120)
-            ax.text(idx, val, f"Worst NG: {val:.3f}", color='red')
+            ax.scatter(x[idx], val, color='red', s=120)
+            ax.text(x[idx], val, f"Worst NG: {val:.3f}", color='red')
 
-        # 🔥 NG 박스
+        # NG 박스
         for i in range(len(values)):
             if ng.iloc[i]:
-                ax.axvspan(i-0.5, i+0.5, color='red', alpha=0.1)
+                ax.axvspan(x[i]-0.5, x[i]+0.5, color='red', alpha=0.1)
+
+        ax.set_title("Measurement Trend")
+        ax.grid(True, linestyle="--", alpha=0.5)
 
         st.pyplot(fig)
 
 # -------------------------------
-# 📐 ZXY (기존 유지)
+# 📐 ZXY 정렬
 # -------------------------------
-elif menu == "📐 ZXY 변환":
+elif menu == "📐 ZXY 정렬":
 
-    st.subheader("Z → X / Y 변환 (기존 유지)")
+    st.subheader("Z / X / Y 데이터 정렬")
 
-    z = st.number_input("Z 값 입력")
+    st.write("데이터 입력 후 정렬 기준을 선택하세요")
 
-    x = z * 0.866
-    y = z * 0.5
+    df_input = pd.DataFrame({
+        "Z": [],
+        "X": [],
+        "Y": []
+    })
 
-    st.write(f"X 값: {x:.3f}")
-    st.write(f"Y 값: {y:.3f}")
+    edited_df = st.data_editor(df_input, num_rows="dynamic")
+
+    sort_option = st.selectbox(
+        "정렬 기준 선택",
+        ["Z → X → Y", "X → Y → Z", "Y → Z → X"]
+    )
+
+    if st.button("정렬 실행"):
+
+        if sort_option == "Z → X → Y":
+            sorted_df = edited_df.sort_values(by=["Z", "X", "Y"])
+        elif sort_option == "X → Y → Z":
+            sorted_df = edited_df.sort_values(by=["X", "Y", "Z"])
+        else:
+            sorted_df = edited_df.sort_values(by=["Y", "Z", "X"])
+
+        st.subheader("정렬 결과")
+        st.dataframe(sorted_df)
+
+        # 🔥 CSV 저장 기능
+        csv = sorted_df.to_csv(index=False).encode('utf-8-sig')
+
+        st.download_button(
+            label="📥 CSV 다운로드",
+            data=csv,
+            file_name="ZXY_sorted.csv",
+            mime="text/csv"
+        )
 
 # -------------------------------
-# 🧮 계산기 (복구🔥)
+# 🧮 계산기
 # -------------------------------
 elif menu == "🧮 계산기":
 
@@ -152,11 +186,8 @@ elif menu == "🧮 계산기":
         base = st.number_input("기준값")
         tol = st.number_input("± 공차")
 
-        min_val = base - tol
-        max_val = base + tol
-
-        st.write(f"MIN: {min_val:.4f}")
-        st.write(f"MAX: {max_val:.4f}")
+        st.write(f"MIN: {base - tol:.4f}")
+        st.write(f"MAX: {base + tol:.4f}")
 
     # 토크 변환
     with tab2:
