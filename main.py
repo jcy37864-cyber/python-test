@@ -1,116 +1,218 @@
+import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+from io import BytesIO
 
-# -----------------------------
-# ✅ 한글 폰트 (Streamlit / 서버 대응)
-# -----------------------------
-import matplotlib
-matplotlib.rcParams['font.family'] = 'DejaVu Sans'  # 기본 (서버용)
-matplotlib.rcParams['axes.unicode_minus'] = False
+# 다크 UI 유지
+st.set_page_config(page_title="품질 측정 도구", layout="wide")
 
-# -----------------------------
-# ✅ 데이터 (엑셀 연동 시 교체)
-# -----------------------------
-df = pd.read_excel("data.xlsx")  # 너 파일명 맞춰
+st.title("📊 품질 측정 통합 프로그램")
 
-# 컬럼명 맞추기
-# df.columns = ['핀', '측정값', 'Min', 'Max']
+col1, col2 = st.columns([1, 1])
 
-# -----------------------------
-# ✅ 정규화 (핵심)
-# -----------------------------
-center = (df['Min'] + df['Max']) / 2
-half_range = (df['Max'] - df['Min']) / 2
-df['편차'] = (df['측정값'] - center) / half_range * 100
+# =========================
+# 🔄 변환기 영역
+# =========================
+with col1:
 
-# -----------------------------
-# ✅ 경향선 (이동평균)
-# -----------------------------
-df['경향'] = df['편차'].rolling(window=3, min_periods=1).mean()
+    st.subheader("🔄 변환기")
 
-# -----------------------------
-# ✅ 자동 분석 (차별화 핵심🔥)
-# -----------------------------
-trend_slope = np.polyfit(df['핀'], df['편차'], 1)[0]
+    selected = st.selectbox(
+        "변환기 선택",
+        ["ZXY 변환", "토크 변환"]
+    )
 
-if trend_slope > 2:
-    trend_msg = "➡️ 뒤쪽 핀으로 갈수록 증가 (공정 밀림 가능)"
-elif trend_slope < -2:
-    trend_msg = "⬅️ 앞쪽 핀으로 갈수록 증가"
-else:
-    trend_msg = "➡️ 큰 경향 없음"
+    # ---------------------
+    # ✅ ZXY 변환 (정상 복구)
+    # ---------------------
+    if selected == "ZXY 변환":
 
-out_of_spec = df[(df['편차'].abs() > 100)]
+        st.markdown("### 📋 엑셀처럼 입력 (복사 붙여넣기 가능)")
 
-# -----------------------------
-# ✅ 그래프
-# -----------------------------
-plt.figure(figsize=(12,6))
+        if "df" not in st.session_state:
+            st.session_state.df = pd.DataFrame({
+                "X": [""] * 100,
+                "Y": [""] * 100,
+                "Z": [""] * 100,
+            })
 
-# 🔵 배경 영역
-plt.axhspan(-100, 100, alpha=0.05)
-plt.axhspan(-100, -80, color='red', alpha=0.15)
-plt.axhspan(80, 100, color='red', alpha=0.15)
-plt.axhspan(-80, 80, color='green', alpha=0.1)
+        edited_df = st.data_editor(
+            st.session_state.df,
+            use_container_width=True,
+            key="editor_zxy"
+        )
 
-# -----------------------------
-# ✅ 점 색상 (이상 강조)
-# -----------------------------
-colors = []
-for val in df['편차']:
-    if abs(val) > 100:
-        colors.append('red')
-    elif abs(val) > 80:
-        colors.append('orange')
-    else:
-        colors.append('gray')
+        if st.button("ZXY 생성"):
 
-plt.scatter(df['핀'], df['편차'], c=colors, s=60, zorder=3)
+            results = []
 
-# -----------------------------
-# ✅ 경향선 (굵게)
-# -----------------------------
-plt.plot(df['핀'], df['경향'], linewidth=3, zorder=2)
+            for _, row in edited_df.iterrows():
+                x = str(row["X"]).strip()
+                y = str(row["Y"]).strip()
+                z = str(row["Z"]).strip()
 
-# -----------------------------
-# ✅ 기준선
-# -----------------------------
-plt.axhline(0, linestyle='--')
-plt.axhline(100, linestyle='--')
-plt.axhline(-100, linestyle='--')
+                if x and y and z:
+                    results.extend([z, x, y])
 
-# -----------------------------
-# ❌ 범례 제거 → 직접 표시
-# -----------------------------
-plt.text(df['핀'].max()+0.5, 0, '중심', va='center')
-plt.text(df['핀'].max()+0.5, 100, '상한', va='center')
-plt.text(df['핀'].max()+0.5, -100, '하한', va='center')
+            if len(results) == 0:
+                st.warning("데이터 없음")
+            else:
+                st.subheader("결과 (세로 출력)")
 
-# -----------------------------
-# 🔥 핵심: 자동 해석 문구
-# -----------------------------
-plt.title(f'핀 위치별 치수 경향 분석\n{trend_msg}', fontsize=14)
+                result_df = pd.DataFrame(results, columns=["결과"])
+                st.dataframe(result_df, use_container_width=True)
 
-# -----------------------------
-# ✅ 축
-# -----------------------------
-plt.xlabel('핀 위치')
-plt.ylabel('편차 (%)')
+                # CSV 다운로드
+                csv = result_df.to_csv(index=False).encode("utf-8-sig")
+                st.download_button(
+                    "CSV 다운로드",
+                    data=csv,
+                    file_name="zxy_result.csv"
+                )
 
-plt.ylim(-120, 120)
-plt.grid(alpha=0.3)
+                # 엑셀 다운로드
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    result_df.to_excel(writer, index=False)
 
-plt.tight_layout()
-plt.show()
+                st.download_button(
+                    "엑셀 다운로드",
+                    data=output.getvalue(),
+                    file_name="zxy_result.xlsx"
+                )
 
-# -----------------------------
-# 🔥 콘솔 출력 (보고서용)
-# -----------------------------
-print("===== 분석 결과 =====")
-print(trend_msg)
+    # ---------------------
+    # 토크 변환
+    # ---------------------
+    elif selected == "토크 변환":
 
-if len(out_of_spec) > 0:
-    print(f"❌ 불량 핀: {list(out_of_spec['핀'])}")
-else:
-    print("✅ 전체 정상 범위")
+        val = st.number_input("값 입력", value=0.0)
+
+        mode = st.selectbox(
+            "변환 선택",
+            ["N·m → kgf·m", "kgf·m → N·m"]
+        )
+
+        if mode == "N·m → kgf·m":
+            st.success(f"{val * 0.101972:.4f} kgf·m")
+        else:
+            st.success(f"{val * 9.80665:.4f} N·m")
+
+
+# =========================
+# 📈 그래프 + 계산기
+# =========================
+with col2:
+
+    tab1, tab2 = st.tabs(["📈 그래프", "🧮 계산기"])
+
+    # ---------------------
+    # 📈 그래프
+    # ---------------------
+    with tab1:
+
+        st.subheader("📈 품질 데이터 그래프")
+
+        st.markdown("### 📋 MIN / MAX / VALUE 입력")
+
+        if "graph_df" not in st.session_state:
+            st.session_state.graph_df = pd.DataFrame({
+                "MIN": [""] * 50,
+                "MAX": [""] * 50,
+                "VALUE": [""] * 50,
+            })
+
+        graph_df = st.data_editor(
+            st.session_state.graph_df,
+            use_container_width=True
+        )
+
+        if st.button("그래프 생성"):
+
+            try:
+                df = graph_df.copy()
+                df = df.replace("", pd.NA).dropna()
+
+                df["MIN"] = df["MIN"].astype(float)
+                df["MAX"] = df["MAX"].astype(float)
+                df["VALUE"] = df["VALUE"].astype(float)
+
+                df["판정"] = df.apply(
+                    lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG",
+                    axis=1
+                )
+
+                st.dataframe(df, use_container_width=True)
+
+                fig, ax = plt.subplots()
+
+                # 선 연결
+                ax.plot(df["VALUE"].values, marker='o', label="VALUE")
+                ax.plot(df["MIN"].values, linestyle='--', label="MIN")
+                ax.plot(df["MAX"].values, linestyle='--', label="MAX")
+
+                # NG 강조 (빨간 점 느낌)
+                for i, row in df.iterrows():
+                    if row["판정"] == "NG":
+                        ax.scatter(i, row["VALUE"], s=100)
+
+                ax.set_title("품질 측정 그래프")
+                ax.legend()
+                ax.grid()
+
+                st.pyplot(fig)
+
+                total = len(df)
+                ng = len(df[df["판정"] == "NG"])
+
+                st.success(f"총 {total}개 중 NG {ng}개")
+
+            except:
+                st.error("데이터 오류")
+
+    # ---------------------
+    # 🧮 계산기
+    # ---------------------
+    with tab2:
+
+        st.subheader("🧮 계산기")
+
+        calc = st.selectbox(
+            "계산기 선택",
+            ["합계", "평균/통계", "공차 판정", "길이 변환"]
+        )
+
+        if calc == "합계":
+            a = st.number_input("A", value=0.0)
+            b = st.number_input("B", value=0.0)
+            st.success(f"결과: {a + b}")
+
+        elif calc == "평균/통계":
+            nums = st.text_input("숫자 입력", "1,2,3")
+
+            try:
+                values = [float(x.strip()) for x in nums.split(",")]
+                avg = sum(values) / len(values)
+                st.success(f"평균: {avg:.4f}")
+                st.info(f"최대: {max(values)} / 최소: {min(values)}")
+            except:
+                st.error("입력 오류")
+
+        elif calc == "공차 판정":
+            target = st.number_input("기준값", value=0.0)
+            tol = st.number_input("±공차", value=0.0)
+            val = st.number_input("측정값", value=0.0)
+
+            if target - tol <= val <= target + tol:
+                st.success("OK")
+            else:
+                st.error("NG")
+
+        elif calc == "길이 변환":
+            val = st.number_input("값", value=0.0)
+            mode = st.selectbox("변환", ["mm→inch", "inch→mm"])
+
+            if mode == "mm→inch":
+                st.success(f"{val/25.4:.4f} inch")
+            else:
+                st.success(f"{val*25.4:.4f} mm")
