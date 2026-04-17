@@ -72,77 +72,83 @@ with left:
 
         file = st.file_uploader("엑셀 업로드", type=["xlsx"])
 
-        # ✅ 템플릿 (샘플 포함)
+        # ✅ 템플릿 (MIN → MAX → VALUE)
         template = pd.DataFrame({
-            "ID": [1, 2, 3],
-            "VALUE": [10.1, 9.9, 10.3],
             "MIN": [9.5, 9.5, 9.5],
-            "MAX": [10.5, 10.5, 10.5]
+            "MAX": [10.5, 10.5, 10.5],
+            "VALUE": [10.1, 9.9, 10.3]
         })
 
         buf = BytesIO()
         template.to_excel(buf, index=False)
 
-        st.download_button("📥 템플릿 다운로드", buf.getvalue(), "template.xlsx")
+        st.download_button(
+            "📥 템플릿 다운로드",
+            buf.getvalue(),
+            "template.xlsx"
+        )
 
         if file:
             df = pd.read_excel(file)
             st.dataframe(df, use_container_width=True)
 
-            # 🔥 컬럼 선택
-            value_col = st.selectbox("VALUE 컬럼 선택", df.columns)
+            # 🔥 컬럼 선택 (순서 맞춤)
             min_col = st.selectbox("MIN 컬럼 선택", df.columns)
             max_col = st.selectbox("MAX 컬럼 선택", df.columns)
+            value_col = st.selectbox("VALUE 컬럼 선택", df.columns)
 
             try:
-                values = df[value_col].astype(float)
                 mins = df[min_col].astype(float)
                 maxs = df[max_col].astype(float)
+                values = df[value_col].astype(float)
 
                 avg = values.mean()
 
                 # NG 판정
                 df_result = pd.DataFrame({
-                    "값": values,
                     "MIN": mins,
-                    "MAX": maxs
+                    "MAX": maxs,
+                    "VALUE": values
                 })
 
                 df_result["판정"] = df_result.apply(
-                    lambda r: "NG" if r["값"] < r["MIN"] or r["값"] > r["MAX"] else "OK",
+                    lambda r: "NG" if r["VALUE"] < r["MIN"] or r["VALUE"] > r["MAX"] else "OK",
                     axis=1
                 )
 
                 ng = (df_result["판정"] == "NG").sum()
+                total = len(df_result)
 
                 st.success(f"평균: {avg:.4f}")
-                st.warning(f"NG 개수: {ng} / {len(values)}")
+                st.warning(f"NG 개수: {ng} / {total} (불량률 {ng/total*100:.1f}%)")
 
                 # 🔥 NG 빨간색 표시
-                def color(val):
-                    return "background-color:red;color:white" if val == "NG" else ""
+                def highlight_row(row):
+                    if row["판정"] == "NG":
+                        return ["background-color:red;color:white"] * len(row)
+                    return [""] * len(row)
 
                 st.dataframe(
-                    df_result.style.applymap(color, subset=["판정"]),
+                    df_result.style.apply(highlight_row, axis=1),
                     use_container_width=True
                 )
 
                 # =========================
-                # 🔥 그래프 (시인성 개선)
+                # 🔥 그래프 (시인성 강화)
                 # =========================
                 fig, ax = plt.subplots()
 
                 ok = df_result[df_result["판정"] == "OK"]
                 ngv = df_result[df_result["판정"] == "NG"]
 
-                # OK / NG 분리 표시
-                ax.scatter(ok.index, ok["값"], label="OK")
-                ax.scatter(ngv.index, ngv["값"], label="NG")
+                # OK / NG 분리
+                ax.scatter(ok.index, ok["VALUE"], label="OK")
+                ax.scatter(ngv.index, ngv["VALUE"], label="NG")
 
                 # 평균선
                 ax.axhline(avg, linestyle="--", label="AVG")
 
-                # 공차선 (평균 기준)
+                # 공차선
                 ax.axhline(mins.mean(), linestyle="--", label="MIN(avg)")
                 ax.axhline(maxs.mean(), linestyle="--", label="MAX(avg)")
 
