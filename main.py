@@ -2,6 +2,17 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
+import platform
+
+# =========================
+# 🔥 한글 폰트 자동 설정
+# =========================
+if platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+else:
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+
+plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(page_title="품질 측정 프로그램", layout="wide")
 
@@ -13,7 +24,7 @@ st.title("📊 품질 측정 통합 프로그램")
 left, right = st.columns([2, 1])
 
 # =========================
-# 🔥 왼쪽: 메인 프로그램
+# 🔥 왼쪽: 메인 기능
 # =========================
 with left:
 
@@ -23,7 +34,7 @@ with left:
     )
 
     # =========================
-    # 🔄 ZXY 변환 (입력형)
+    # 🔄 ZXY 변환
     # =========================
     if app_mode == "ZXY 변환":
 
@@ -64,7 +75,7 @@ with left:
                 st.download_button("CSV 다운로드", csv, "zxy_result.csv")
 
     # =========================
-    # 📈 통계 / 그래프 (엑셀 기반)
+    # 📈 통계 / 그래프
     # =========================
     elif app_mode == "통계 / 그래프":
 
@@ -92,7 +103,7 @@ with left:
             df = pd.read_excel(file)
             st.dataframe(df, use_container_width=True)
 
-            # 🔥 컬럼 선택 (순서 맞춤)
+            # 🔥 컬럼 선택
             min_col = st.selectbox("MIN 컬럼 선택", df.columns)
             max_col = st.selectbox("MAX 컬럼 선택", df.columns)
             value_col = st.selectbox("VALUE 컬럼 선택", df.columns)
@@ -104,7 +115,7 @@ with left:
 
                 avg = values.mean()
 
-                # NG 판정
+                # 결과 테이블
                 df_result = pd.DataFrame({
                     "MIN": mins,
                     "MAX": maxs,
@@ -122,7 +133,7 @@ with left:
                 st.success(f"평균: {avg:.4f}")
                 st.warning(f"NG 개수: {ng} / {total} (불량률 {ng/total*100:.1f}%)")
 
-                # 🔥 NG 빨간색 표시
+                # 🔥 NG 행 강조
                 def highlight_row(row):
                     if row["판정"] == "NG":
                         return ["background-color:red;color:white"] * len(row)
@@ -134,23 +145,23 @@ with left:
                 )
 
                 # =========================
-                # 🔥 그래프 (시인성 강화)
+                # 🔥 그래프 (완전 수정)
                 # =========================
                 fig, ax = plt.subplots()
 
                 ok = df_result[df_result["판정"] == "OK"]
                 ngv = df_result[df_result["판정"] == "NG"]
 
-                # OK / NG 분리
+                # OK / NG 분리 표시
                 ax.scatter(ok.index, ok["VALUE"], label="OK")
                 ax.scatter(ngv.index, ngv["VALUE"], label="NG")
 
                 # 평균선
                 ax.axhline(avg, linestyle="--", label="AVG")
 
-                # 공차선
-                ax.axhline(mins.mean(), linestyle="--", label="MIN(avg)")
-                ax.axhline(maxs.mean(), linestyle="--", label="MAX(avg)")
+                # ✅ 공차선 (핵심 수정!)
+                ax.axhline(mins.iloc[0], linestyle="--", label="MIN")
+                ax.axhline(maxs.iloc[0], linestyle="--", label="MAX")
 
                 ax.set_title("측정값 분포 (NG 강조)")
                 ax.legend()
@@ -161,7 +172,7 @@ with left:
                 st.error(f"데이터 오류: {e}")
 
 # =========================
-# 🔧 오른쪽: 계산 / 기타 기능
+# 🔧 오른쪽: 계산 기능
 # =========================
 with right:
 
@@ -172,9 +183,7 @@ with right:
         ["토크 변환", "공차 계산"]
     )
 
-    # =========================
     # 🔩 토크 변환
-    # =========================
     if tool == "토크 변환":
 
         st.markdown("### 🔩 토크 변환")
@@ -193,9 +202,7 @@ with right:
 
         st.success(f"결과: {result:.4f}")
 
-    # =========================
     # 📏 공차 계산
-    # =========================
     elif tool == "공차 계산":
 
         st.markdown("### 📏 공차 계산")
