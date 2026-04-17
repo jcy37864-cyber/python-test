@@ -3,48 +3,69 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# -------------------------------
-# 페이지 설정
-# -------------------------------
 st.set_page_config(layout="wide")
 
 # -------------------------------
-# 🔥 사이드바 스타일 (핵심)
+# 🔥 UI 스타일 개선
 # -------------------------------
 st.markdown("""
 <style>
-/* 사이드바 전체 */
+
+/* 사이드바 배경 */
 section[data-testid="stSidebar"] {
-    background-color: #1f2937;
+    background-color: #111827;
 }
 
-/* 메뉴 글자 크게 */
-div[data-testid="stSidebar"] label {
-    font-size: 20px !important;
+/* 사이드바 제목 */
+section[data-testid="stSidebar"] label {
+    color: white !important;
+    font-size: 18px !important;
+    font-weight: bold;
+}
+
+/* 라디오 버튼 텍스트 */
+div[role="radiogroup"] label {
+    color: white !important;
+    font-size: 16px !important;
+    background-color: #1f2937;
+    padding: 8px;
+    border-radius: 6px;
+    margin-bottom: 5px;
+}
+
+/* 선택된 메뉴 강조 */
+div[role="radiogroup"] label:has(input:checked) {
+    background-color: #2563eb !important;
     color: white !important;
     font-weight: bold;
 }
 
-/* 라디오 버튼 */
-div[role="radiogroup"] > label {
-    background-color: #374151;
+/* selectbox 색상 구분 */
+div[data-testid="column"] > div:nth-child(1) {
+    background-color: #f0f9ff;
     padding: 10px;
     border-radius: 8px;
-    margin-bottom: 8px;
-    color: white !important;
 }
 
-/* 선택된 메뉴 */
-div[role="radiogroup"] > label[data-baseweb="radio"] > div:first-child {
-    background-color: #2563eb !important;
+div[data-testid="column"] > div:nth-child(2) {
+    background-color: #fefce8;
+    padding: 10px;
+    border-radius: 8px;
 }
+
+div[data-testid="column"] > div:nth-child(3) {
+    background-color: #f0fdf4;
+    padding: 10px;
+    border-radius: 8px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------------
 # 제목
 # -------------------------------
-st.title("📊 품질 분석 통합 프로그램")
+st.title("📊 품질 분석 시스템")
 
 # -------------------------------
 # 메뉴
@@ -55,11 +76,11 @@ menu = st.sidebar.radio(
 )
 
 # -------------------------------
-# 🔵 통계 그래프
+# 📊 통계 그래프
 # -------------------------------
 if menu == "📊 통계 그래프":
 
-    st.warning("⚠️ 반드시 MIN / MAX / VALUE 컬럼이 올바르게 선택되었는지 확인하세요!")
+    st.warning("⚠️ 반드시 MIN / MAX / VALUE 컬럼을 확인하세요!")
 
     uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
 
@@ -68,7 +89,7 @@ if menu == "📊 통계 그래프":
 
         st.dataframe(df)
 
-        # 🔥 자동 컬럼 찾기
+        # 자동 컬럼 찾기
         def find_column(name):
             for col in df.columns:
                 if name.lower() in col.lower():
@@ -81,16 +102,28 @@ if menu == "📊 통계 그래프":
 
         col1, col2, col3 = st.columns(3)
 
-        min_col = col1.selectbox("MIN", df.columns, index=df.columns.get_loc(min_default))
-        max_col = col2.selectbox("MAX", df.columns, index=df.columns.get_loc(max_default))
-        val_col = col3.selectbox("VALUE", df.columns, index=df.columns.get_loc(val_default))
+        min_col = col1.selectbox(
+            "🔵 MIN (선택)",
+            df.columns,
+            index=df.columns.get_loc(min_default)
+        )
 
-        # 숫자 변환
+        max_col = col2.selectbox(
+            "🟡 MAX (선택)",
+            df.columns,
+            index=df.columns.get_loc(max_default)
+        )
+
+        val_col = col3.selectbox(
+            "🟢 VALUE (선택)",
+            df.columns,
+            index=df.columns.get_loc(val_default)
+        )
+
         mins = pd.to_numeric(df[min_col], errors='coerce')
         maxs = pd.to_numeric(df[max_col], errors='coerce')
         values = pd.to_numeric(df[val_col], errors='coerce')
 
-        # NG 판정
         ng = (values < mins) | (values > maxs)
         ok = ~ng
 
@@ -98,21 +131,15 @@ if menu == "📊 통계 그래프":
 
         fig, ax = plt.subplots(figsize=(14, 6))
 
-        # 공차 영역
         ax.fill_between(x, mins, maxs, alpha=0.2, label="Spec Range")
-
-        # 라인
         ax.plot(x, values, linewidth=2)
 
-        # 점
         ax.scatter(x[ok], values[ok], s=60, label="OK")
         ax.scatter(x[ng], values[ng], s=80, color='red', label="NG")
 
-        # 평균선
         avg = values.mean()
         ax.axhline(avg, linestyle='--', linewidth=2, label="AVG")
 
-        # Y축 자동 스케일
         low = min(values.min(), mins.min())
         high = max(values.max(), maxs.max())
         margin = (high - low) * 0.1
@@ -124,10 +151,8 @@ if menu == "📊 통계 그래프":
 
         st.pyplot(fig)
 
-        # -------------------------------
-        # 분석 결과
-        # -------------------------------
-        st.subheader("📊 자동 분석")
+        # 분석
+        st.subheader("📊 분석 결과")
 
         total = len(values)
         ng_count = int(ng.sum())
@@ -138,35 +163,19 @@ if menu == "📊 통계 그래프":
         col2.metric("NG 개수", ng_count)
         col3.metric("NG 비율 (%)", f"{ng_rate:.2f}")
 
-        st.write(f"평균: {values.mean():.4f}")
-        st.write(f"최소: {values.min():.4f}")
-        st.write(f"최대: {values.max():.4f}")
-
-        # 한줄 판단
-        if ng_count == 0:
-            st.success("✅ 데이터 안정")
-        elif ng_rate < 5:
-            st.warning("⚠️ 일부 NG 발생")
-        else:
-            st.error("🚨 데이터 이상")
-
 # -------------------------------
-# 🟢 ZXY 변환
+# ZXY
 # -------------------------------
 elif menu == "📐 ZXY 변환":
 
     st.subheader("Z → X / Y 변환")
 
     z = st.number_input("Z 값")
-
-    x = z * 0.866
-    y = z * 0.5
-
-    st.write(f"X: {x:.3f}")
-    st.write(f"Y: {y:.3f}")
+    st.write(f"X: {z * 0.866:.3f}")
+    st.write(f"Y: {z * 0.5:.3f}")
 
 # -------------------------------
-# 🟠 토크 변환
+# 토크
 # -------------------------------
 elif menu == "🔧 토크 변환":
 
