@@ -13,7 +13,7 @@ st.title("📊 품질 측정 통합 프로그램")
 left, right = st.columns([2, 1])
 
 # =========================
-# 🔥 메인 프로그램 선택
+# 🔥 왼쪽: 메인 프로그램
 # =========================
 with left:
 
@@ -27,7 +27,7 @@ with left:
     # =========================
     if app_mode == "ZXY 변환":
 
-        st.subheader("🔄 ZXY 변환 (데이터 입력)")
+        st.subheader("🔄 ZXY 변환 (직접 입력)")
 
         if "zxy_df" not in st.session_state:
             st.session_state.zxy_df = pd.DataFrame({
@@ -52,25 +52,34 @@ with left:
                 if x and y and z:
                     results.extend([z, x, y])
 
-            result_df = pd.DataFrame(results, columns=["결과"])
+            if len(results) == 0:
+                st.warning("데이터 없음")
+            else:
+                result_df = pd.DataFrame(results, columns=["결과"])
 
-            st.subheader("결과")
-            st.dataframe(result_df, use_container_width=True)
+                st.subheader("결과")
+                st.dataframe(result_df, use_container_width=True)
 
-            csv = result_df.to_csv(index=False).encode("utf-8-sig")
-            st.download_button("CSV 다운로드", csv, "zxy_result.csv")
+                csv = result_df.to_csv(index=False).encode("utf-8-sig")
+                st.download_button("CSV 다운로드", csv, "zxy_result.csv")
 
     # =========================
-    # 📈 통계 / 그래프 (엑셀)
+    # 📈 통계 / 그래프 (엑셀 기반)
     # =========================
     elif app_mode == "통계 / 그래프":
 
-        st.subheader("📈 통계 / 그래프")
+        st.subheader("📈 통계 / 그래프 (엑셀 업로드)")
 
         file = st.file_uploader("엑셀 업로드", type=["xlsx"])
 
-        # 템플릿
-        template = pd.DataFrame({"값": []})
+        # ✅ 템플릿 (샘플 포함)
+        template = pd.DataFrame({
+            "ID": [1, 2, 3],
+            "VALUE": [10.1, 9.9, 10.3],
+            "MIN": [9.5, 9.5, 9.5],
+            "MAX": [10.5, 10.5, 10.5]
+        })
+
         buf = BytesIO()
         template.to_excel(buf, index=False)
 
@@ -78,26 +87,38 @@ with left:
 
         if file:
             df = pd.read_excel(file)
+            st.dataframe(df, use_container_width=True)
+
+            # 🔥 컬럼 선택
+            value_col = st.selectbox("VALUE 컬럼 선택", df.columns)
+            min_col = st.selectbox("MIN 컬럼 선택", df.columns)
+            max_col = st.selectbox("MAX 컬럼 선택", df.columns)
 
             try:
-                values = df.iloc[:, 0].dropna().astype(float)
+                values = df[value_col].astype(float)
+                mins = df[min_col].astype(float)
+                maxs = df[max_col].astype(float)
 
                 avg = values.mean()
-                st.write(f"평균: {avg:.4f}")
 
-                # 공차 입력
-                lsl = st.number_input("LSL", value=0.0)
-                usl = st.number_input("USL", value=10.0)
+                # NG 판정
+                df_result = pd.DataFrame({
+                    "값": values,
+                    "MIN": mins,
+                    "MAX": maxs
+                })
 
-                df_result = pd.DataFrame({"값": values})
-                df_result["판정"] = df_result["값"].apply(
-                    lambda x: "NG" if x < lsl or x > usl else "OK"
+                df_result["판정"] = df_result.apply(
+                    lambda r: "NG" if r["값"] < r["MIN"] or r["값"] > r["MAX"] else "OK",
+                    axis=1
                 )
 
                 ng = (df_result["판정"] == "NG").sum()
-                st.write(f"NG: {ng}")
 
-                # 표 색상
+                st.success(f"평균: {avg:.4f}")
+                st.warning(f"NG 개수: {ng} / {len(values)}")
+
+                # 🔥 NG 빨간색 표시
                 def color(val):
                     return "background-color:red;color:white" if val == "NG" else ""
 
@@ -106,24 +127,32 @@ with left:
                     use_container_width=True
                 )
 
-                # 그래프
+                # =========================
+                # 🔥 그래프 (시인성 개선)
+                # =========================
                 fig, ax = plt.subplots()
 
-                ok = df_result[df_result["판정"] == "OK"]["값"]
-                ngv = df_result[df_result["판정"] == "NG"]["값"]
+                ok = df_result[df_result["판정"] == "OK"]
+                ngv = df_result[df_result["판정"] == "NG"]
 
-                ax.hist(ok, alpha=0.7, label="OK")
-                ax.hist(ngv, alpha=0.7, label="NG")
+                # OK / NG 분리 표시
+                ax.scatter(ok.index, ok["값"], label="OK")
+                ax.scatter(ngv.index, ngv["값"], label="NG")
 
-                ax.axvline(avg, linestyle="--", label="AVG")
-                ax.axvline(lsl, linestyle="--", label="LSL")
-                ax.axvline(usl, linestyle="--", label="USL")
+                # 평균선
+                ax.axhline(avg, linestyle="--", label="AVG")
 
+                # 공차선 (평균 기준)
+                ax.axhline(mins.mean(), linestyle="--", label="MIN(avg)")
+                ax.axhline(maxs.mean(), linestyle="--", label="MAX(avg)")
+
+                ax.set_title("측정값 분포 (NG 강조)")
                 ax.legend()
+
                 st.pyplot(fig)
 
-            except:
-                st.error("데이터 오류")
+            except Exception as e:
+                st.error(f"데이터 오류: {e}")
 
 # =========================
 # 🔧 오른쪽: 계산 / 기타 기능
@@ -172,5 +201,5 @@ with right:
         tol = upper - lower
 
         st.info(f"공차: {tol}")
-        st.write(f"편차(+): {upper - target}")
-        st.write(f"편차(-): {target - lower}")
+        st.write(f"+편차: {upper - target}")
+        st.write(f"-편차: {target - lower}")
