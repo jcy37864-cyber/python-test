@@ -1,202 +1,156 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
+from io import BytesIO
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="품질 측정 도구", layout="wide")
 
-# -------------------------------
-# UI 스타일
-# -------------------------------
-st.markdown("""
-<style>
-section[data-testid="stSidebar"] {
-    background-color: #111827;
-}
-section[data-testid="stSidebar"] * {
-    color: white !important;
-}
-div[role="radiogroup"] label {
-    font-size: 16px;
-    background-color: #1f2937;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 5px;
-}
-div[role="radiogroup"] label:has(input:checked) {
-    background-color: #2563eb !important;
-    font-weight: bold;
-}
-</style>
-""", unsafe_allow_html=True)
+st.title("📊 품질 측정 통합 프로그램")
 
-st.title("📊 품질 분석 시스템")
+col1, col2 = st.columns([1, 1])
 
-# -------------------------------
-# 메뉴
-# -------------------------------
-menu = st.sidebar.radio(
-    "기능 선택",
-    ["📊 통계 그래프", "📐 ZXY 정렬", "🧮 계산기"]
-)
+# =========================
+# 🔄 변환기
+# =========================
+with col1:
 
-# -------------------------------
-# 📊 그래프
-# -------------------------------
-if menu == "📊 통계 그래프":
+    st.subheader("🔄 변환기")
 
-    st.warning("⚠️ 반드시 MIN / MAX / VALUE 컬럼 확인하세요!")
-
-    uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
-
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-
-        def find_column(name):
-            for col in df.columns:
-                if name.lower() in col.lower():
-                    return col
-            return df.columns[0]
-
-        min_col = find_column("min")
-        max_col = find_column("max")
-        val_col = find_column("value")
-
-        col1, col2, col3 = st.columns(3)
-
-        min_col = col1.selectbox("🔵 MIN (선택)", df.columns, index=df.columns.get_loc(min_col))
-        max_col = col2.selectbox("🟡 MAX (선택)", df.columns, index=df.columns.get_loc(max_col))
-        val_col = col3.selectbox("🟢 VALUE (선택)", df.columns, index=df.columns.get_loc(val_col))
-
-        mins = pd.to_numeric(df[min_col], errors='coerce')
-        maxs = pd.to_numeric(df[max_col], errors='coerce')
-        values = pd.to_numeric(df[val_col], errors='coerce')
-
-        ng = (values < mins) | (values > maxs)
-        ok = ~ng
-
-        # NG 강조 테이블
-        def highlight(row):
-            if row[val_col] < row[min_col] or row[val_col] > row[max_col]:
-                return ["background-color: red"] * len(row)
-            return [""] * len(row)
-
-        st.dataframe(df.style.apply(highlight, axis=1))
-
-        # 🔥 데이터 번호 1부터 시작
-        x = np.arange(1, len(values) + 1)
-
-        fig, ax = plt.subplots(figsize=(14, 6))
-
-        ax.fill_between(x, mins, maxs, alpha=0.15)
-        ax.plot(x, values)
-
-        ax.scatter(x[ok], values[ok])
-        ax.scatter(x[ng], values[ng], color='red')
-
-        # 평균선
-        ax.axhline(values.mean(), linestyle='--')
-
-        # MIN MAX 표시
-        min_line = mins.mean()
-        max_line = maxs.mean()
-
-        ax.axhline(min_line, linestyle=':')
-        ax.axhline(max_line, linestyle=':')
-
-        ax.text(x[-1], min_line, f"MIN: {min_line:.3f}", ha='right')
-        ax.text(x[-1], max_line, f"MAX: {max_line:.3f}", ha='right')
-
-        # 최악 NG
-        deviation = np.where(values < mins, mins - values, values - maxs)
-        deviation = np.where(ng, deviation, 0)
-
-        if ng.any():
-            idx = np.argmax(deviation)
-            val = values.iloc[idx]
-
-            ax.scatter(x[idx], val, color='red', s=120)
-            ax.text(x[idx], val, f"Worst NG: {val:.3f}", color='red')
-
-        # NG 박스
-        for i in range(len(values)):
-            if ng.iloc[i]:
-                ax.axvspan(x[i]-0.5, x[i]+0.5, color='red', alpha=0.1)
-
-        ax.set_title("Measurement Trend")
-        ax.grid(True, linestyle="--", alpha=0.5)
-
-        st.pyplot(fig)
-
-# -------------------------------
-# 📐 ZXY 정렬
-# -------------------------------
-elif menu == "📐 ZXY 정렬":
-
-    st.subheader("Z / X / Y 데이터 정렬")
-
-    st.write("데이터 입력 후 정렬 기준을 선택하세요")
-
-    df_input = pd.DataFrame({
-        "Z": [],
-        "X": [],
-        "Y": []
-    })
-
-    edited_df = st.data_editor(df_input, num_rows="dynamic")
-
-    sort_option = st.selectbox(
-        "정렬 기준 선택",
-        ["Z → X → Y", "X → Y → Z", "Y → Z → X"]
+    selected = st.selectbox(
+        "변환기 선택",
+        ["ZXY 변환", "토크 변환"]
     )
 
-    if st.button("정렬 실행"):
+    # ---------------------
+    # 🔥 ZXY 변환 (최종 완성)
+    # ---------------------
+    if selected == "ZXY 변환":
 
-        if sort_option == "Z → X → Y":
-            sorted_df = edited_df.sort_values(by=["Z", "X", "Y"])
-        elif sort_option == "X → Y → Z":
-            sorted_df = edited_df.sort_values(by=["X", "Y", "Z"])
-        else:
-            sorted_df = edited_df.sort_values(by=["Y", "Z", "X"])
+        st.markdown("### 📋 엑셀처럼 입력 (복사 → 붙여넣기 가능)")
 
-        st.subheader("정렬 결과")
-        st.dataframe(sorted_df)
+        # 초기 테이블
+        if "df" not in st.session_state:
+            st.session_state.df = pd.DataFrame({
+                "X": [""] * 100,
+                "Y": [""] * 100,
+                "Z": [""] * 100,
+            })
 
-        # 🔥 CSV 저장 기능
-        csv = sorted_df.to_csv(index=False).encode('utf-8-sig')
-
-        st.download_button(
-            label="📥 CSV 다운로드",
-            data=csv,
-            file_name="ZXY_sorted.csv",
-            mime="text/csv"
+        edited_df = st.data_editor(
+            st.session_state.df,
+            use_container_width=True,
+            key="editor"
         )
 
-# -------------------------------
-# 🧮 계산기
-# -------------------------------
-elif menu == "🧮 계산기":
+        # 🔥 자동 실행 (버튼 없음)
+        results = []
 
-    tab1, tab2 = st.tabs(["공차 계산", "토크 변환"])
+        for _, row in edited_df.iterrows():
+            x = str(row["X"]).strip()
+            y = str(row["Y"]).strip()
+            z = str(row["Z"]).strip()
 
-    # 공차 계산
-    with tab1:
-        st.subheader("공차 계산")
+            if x and y and z:
+                results.extend([z, x, y])
 
-        base = st.number_input("기준값")
-        tol = st.number_input("± 공차")
+        # 결과 표시
+        st.markdown("### 🔽 결과 (세로)")
 
-        st.write(f"MIN: {base - tol:.4f}")
-        st.write(f"MAX: {base + tol:.4f}")
-
-    # 토크 변환
-    with tab2:
-        st.subheader("토크 변환")
-
-        value = st.number_input("값 입력")
-        unit = st.selectbox("단위", ["kgf·cm", "N·m"])
-
-        if unit == "kgf·cm":
-            st.write(f"N·m: {value * 0.0980665:.4f}")
+        if len(results) == 0:
+            st.info("데이터 입력하면 자동 변환됨")
         else:
-            st.write(f"kgf·cm: {value / 0.0980665:.4f}")
+            result_df = pd.DataFrame(results, columns=["결과"])
+            st.dataframe(result_df, use_container_width=True)
+
+            # CSV 다운로드
+            csv = result_df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "📥 CSV 다운로드",
+                data=csv,
+                file_name="zxy_result.csv"
+            )
+
+            # 엑셀 다운로드
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                result_df.to_excel(writer, index=False)
+
+            st.download_button(
+                "📥 엑셀 다운로드",
+                data=output.getvalue(),
+                file_name="zxy_result.xlsx"
+            )
+
+    # ---------------------
+    # 🔩 토크 변환
+    # ---------------------
+    elif selected == "토크 변환":
+
+        val = st.number_input("값 입력", value=0.0)
+
+        mode = st.selectbox(
+            "변환 선택",
+            ["N·m → kgf·m", "kgf·m → N·m"]
+        )
+
+        if mode == "N·m → kgf·m":
+            result = val * 0.101972
+            st.success(f"{result:.4f} kgf·m")
+        else:
+            result = val * 9.80665
+            st.success(f"{result:.4f} N·m")
+
+
+# =========================
+# 🧮 계산기
+# =========================
+with col2:
+
+    st.subheader("🧮 계산기")
+
+    calc = st.selectbox(
+        "계산기 선택",
+        ["합계", "평균/통계", "공차 판정", "길이 변환"]
+    )
+
+    # 합계
+    if calc == "합계":
+        a = st.number_input("A", value=0.0)
+        b = st.number_input("B", value=0.0)
+        st.success(f"결과: {a + b}")
+
+    # 평균/통계
+    elif calc == "평균/통계":
+        nums = st.text_input("숫자 입력 (콤마)", "1,2,3")
+
+        try:
+            values = [float(x.strip()) for x in nums.split(",")]
+            avg = sum(values) / len(values)
+            st.success(f"평균: {avg:.4f}")
+            st.info(f"최대: {max(values)} / 최소: {min(values)}")
+        except:
+            st.error("입력 오류")
+
+    # 공차 판정
+    elif calc == "공차 판정":
+        target = st.number_input("기준값", value=0.0)
+        tol = st.number_input("허용오차 ±", value=0.0)
+        measured = st.number_input("측정값", value=0.0)
+
+        lower = target - tol
+        upper = target + tol
+
+        if lower <= measured <= upper:
+            st.success(f"OK ({lower} ~ {upper})")
+        else:
+            st.error(f"NG ({lower} ~ {upper})")
+
+    # 길이 변환
+    elif calc == "길이 변환":
+        length = st.number_input("길이", value=0.0)
+
+        mode = st.selectbox("변환", ["mm → inch", "inch → mm"])
+
+        if mode == "mm → inch":
+            st.success(f"{length / 25.4:.4f} inch")
+        else:
+            st.success(f"{length * 25.4:.4f} mm")
