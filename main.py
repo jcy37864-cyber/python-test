@@ -4,135 +4,122 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # -------------------------------
-# 한글 깨짐 방지
+# 한글 설정
 # -------------------------------
 plt.rcParams['font.family'] = 'Malgun Gothic'
 plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(layout="wide")
-st.title("📊 품질 데이터 분석 시스템")
+st.title("📊 품질 분석 통합 프로그램")
 
 # -------------------------------
-# 엑셀 업로드
+# 좌측 메뉴
 # -------------------------------
-uploaded_file = st.file_uploader("엑셀 파일 업로드 (MIN / MAX / VALUE)", type=["xlsx"])
+menu = st.sidebar.radio(
+    "기능 선택",
+    ["통계 그래프", "ZXY 변환", "토크 변환"]
+)
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
+# -------------------------------
+# 🔵 1. 통계 그래프
+# -------------------------------
+if menu == "통계 그래프":
 
-    st.subheader("📄 데이터 미리보기")
-    st.dataframe(df)
+    uploaded_file = st.file_uploader("엑셀 업로드 (MIN / MAX / VALUE)", type=["xlsx"])
 
-    # 컬럼 선택
-    min_col = st.selectbox("MIN 컬럼", df.columns)
-    max_col = st.selectbox("MAX 컬럼", df.columns)
-    val_col = st.selectbox("VALUE 컬럼", df.columns)
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
 
-    mins = df[min_col]
-    maxs = df[max_col]
-    values = df[val_col]
+        st.dataframe(df)
 
-    # -------------------------------
-    # NG 판정
-    # -------------------------------
-    ng = (values < mins) | (values > maxs)
-    ok = ~ng
+        min_col = st.selectbox("MIN", df.columns)
+        max_col = st.selectbox("MAX", df.columns)
+        val_col = st.selectbox("VALUE", df.columns)
 
-    x = np.arange(len(values))
+        # 🔥 숫자 변환 (중요)
+        mins = pd.to_numeric(df[min_col], errors='coerce')
+        maxs = pd.to_numeric(df[max_col], errors='coerce')
+        values = pd.to_numeric(df[val_col], errors='coerce')
 
-    # -------------------------------
-    # 그래프
-    # -------------------------------
-    fig, ax = plt.subplots(figsize=(14, 6))
+        # 🔥 NG 판정 (행별 비교로 수정)
+        ng = (values < mins) | (values > maxs)
+        ok = ~ng
 
-    # 공차 영역
-    ax.fill_between(
-        x,
-        mins.iloc[0],
-        maxs.iloc[0],
-        alpha=0.2,
-        label="Spec Range"
-    )
+        x = np.arange(len(values))
 
-    # 라인 (트렌드)
-    ax.plot(x, values, linewidth=2)
+        fig, ax = plt.subplots(figsize=(14, 6))
 
-    # OK / NG 점
-    ax.scatter(x[ok], values[ok], s=60, label="OK")
-    ax.scatter(x[ng], values[ng], s=80, label="NG")
+        # 공차 영역 (평균이 아니라 실제 범위)
+        ax.fill_between(x, mins, maxs, alpha=0.2, label="Spec Range")
 
-    # 평균선
-    avg = values.mean()
-    ax.axhline(avg, linestyle='--', linewidth=2, label="AVG")
+        # 선 (트렌드)
+        ax.plot(x, values, linewidth=2)
 
-    # -------------------------------
-    # 🔥 Y축 자동 확대 (핵심)
-    # -------------------------------
-    low = min(values.min(), mins.min())
-    high = max(values.max(), maxs.max())
-    margin = (high - low) * 0.15
+        # 점
+        ax.scatter(x[ok], values[ok], s=60, label="OK")
+        ax.scatter(x[ng], values[ng], s=80, color='red', label="NG")
 
-    ax.set_ylim(low - margin, high + margin)
+        # 평균선
+        avg = values.mean()
+        ax.axhline(avg, linestyle='--', linewidth=2, label="AVG")
 
-    # 스타일
-    ax.set_title("Measurement Trend")
-    ax.legend()
-    ax.grid(True, linestyle="--", alpha=0.5)
+        # 🔥 Y축 자동 스케일
+        low = min(values.min(), mins.min())
+        high = max(values.max(), maxs.max())
+        margin = (high - low) * 0.1
+        ax.set_ylim(low - margin, high + margin)
 
-    st.pyplot(fig)
+        ax.set_title("Measurement Trend")
+        ax.legend()
+        ax.grid(True, linestyle="--", alpha=0.5)
 
-    # -------------------------------
-    # 📊 분석 결과
-    # -------------------------------
-    st.subheader("📊 자동 분석 결과")
+        st.pyplot(fig)
 
-    total = len(values)
-    ng_count = ng.sum()
-    ok_count = ok.sum()
-    ng_rate = (ng_count / total) * 100
+        # -------------------------------
+        # 분석
+        # -------------------------------
+        st.subheader("📊 분석 결과")
 
-    # 트렌드 분석 (기울기)
-    slope = np.polyfit(x, values, 1)[0]
+        total = len(values)
+        ng_count = int(ng.sum())
+        ng_rate = (ng_count / total) * 100 if total > 0 else 0
 
-    if slope > 0.001:
-        trend = "📈 상승 경향"
-    elif slope < -0.001:
-        trend = "📉 하락 경향"
+        st.write(f"총 데이터: {total}")
+        st.write(f"NG 개수: {ng_count}")
+        st.write(f"NG 비율: {ng_rate:.2f}%")
+
+        # 🔥 디버깅 표시 (문제 확인용)
+        st.write("NG 데이터 미리보기")
+        st.dataframe(df[ng])
+
+# -------------------------------
+# 🟢 2. ZXY 변환
+# -------------------------------
+elif menu == "ZXY 변환":
+
+    st.subheader("Z → X / Y 변환")
+
+    z = st.number_input("Z 값 입력")
+
+    x = z * 0.866
+    y = z * 0.5
+
+    st.write(f"X 값: {x:.3f}")
+    st.write(f"Y 값: {y:.3f}")
+
+# -------------------------------
+# 🟠 3. 토크 변환
+# -------------------------------
+elif menu == "토크 변환":
+
+    st.subheader("토크 변환기")
+
+    value = st.number_input("값 입력")
+    unit = st.selectbox("단위", ["kgf·cm", "N·m"])
+
+    if unit == "kgf·cm":
+        result = value * 0.0980665
+        st.write(f"N·m: {result:.4f}")
     else:
-        trend = "➖ 안정 상태"
-
-    # 공차 중심 대비 위치
-    center = (mins.mean() + maxs.mean()) / 2
-    if values.mean() > center:
-        position = "상한쪽 치우침"
-    else:
-        position = "하한쪽 치우침"
-
-    # -------------------------------
-    # 결과 출력
-    # -------------------------------
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("총 데이터", total)
-    col2.metric("NG 개수", ng_count)
-    col3.metric("NG 비율 (%)", f"{ng_rate:.2f}")
-
-    st.write(f"📌 평균: {values.mean():.4f}")
-    st.write(f"📌 최소: {values.min():.4f}")
-    st.write(f"📌 최대: {values.max():.4f}")
-
-    st.write(f"📌 트렌드: {trend}")
-    st.write(f"📌 위치: {position}")
-
-    # -------------------------------
-    # 🔥 한줄 요약 (현업 핵심)
-    # -------------------------------
-    if ng_count == 0:
-        summary = "✅ 전체 공정 안정 (NG 없음)"
-    elif ng_rate < 5:
-        summary = "⚠️ 일부 NG 발생 (관리 필요)"
-    else:
-        summary = "🚨 NG 다수 발생 (공정 이상 가능)"
-
-    st.subheader("🧠 종합 판단")
-    st.success(summary)
+        result = value / 0.0980665
+        st.write(f"kgf·cm: {result:.4f}")
