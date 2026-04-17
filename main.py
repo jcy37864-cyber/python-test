@@ -144,11 +144,11 @@ if menu == "📊 통계 그래프":
 
         # 한줄 판단
         if ng_count == 0:
-            st.success("✅ 공정 안정")
+            st.success("✅ 데이터 안정")
         elif ng_rate < 5:
             st.warning("⚠️ 일부 NG 발생")
         else:
-            st.error("🚨 공정 이상")
+            st.error("🚨 데이터 이상")
 
 # -------------------------------
 # 🟢 ZXY 변환
