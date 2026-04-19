@@ -66,17 +66,20 @@ if menu == "ZXY 변환":
 # =========================
 # 📈 그래프 분석
 # =========================
+# =========================
+# 📈 그래프 (최종 개선)
+# =========================
 elif menu == "그래프 분석":
 
     st.subheader("📈 품질 그래프 분석")
 
     uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx", "csv"])
 
-    # 템플릿 다운로드
+    # 템플릿
     template = pd.DataFrame({
-        "MIN": [0],
-        "MAX": [10],
-        "VALUE": [5]
+        "MIN": [30.1],
+        "MAX": [30.7],
+        "VALUE": [30.3]
     })
 
     output = BytesIO()
@@ -98,7 +101,7 @@ elif menu == "그래프 분석":
             axis=1
         )
 
-        # 🔥 NG 색상 표시
+        # 🔴 NG 강조 테이블
         def highlight(row):
             if row["판정"] == "NG":
                 return ['background-color: red'] * len(row)
@@ -106,30 +109,65 @@ elif menu == "그래프 분석":
 
         st.dataframe(df.style.apply(highlight, axis=1))
 
-        # 그래프
-        fig, ax = plt.subplots()
+        # ======================
+        # 📊 그래프 (핵심 개선)
+        # ======================
+        fig, ax = plt.subplots(figsize=(10, 4))  # ← 크기 줄임
 
         ax.plot(df["VALUE"], marker='o', label="VALUE")
         ax.plot(df["MIN"], linestyle='--', label="MIN")
         ax.plot(df["MAX"], linestyle='--', label="MAX")
 
-        # NG 강조
+        # 🔴 NG 표시
         for i, row in df.iterrows():
             if row["판정"] == "NG":
-                ax.scatter(i, row["VALUE"], color='red', s=100)
+                ax.scatter(i, row["VALUE"], color='red', s=80)
 
-        ax.set_title("품질 경향 그래프")
+        # ✅ MIN/MAX 값 표시 (중요)
+        ax.text(len(df)-1, df["MAX"].iloc[-1], f"MAX: {df['MAX'].iloc[-1]:.3f}",
+                color='green', ha='right')
+
+        ax.text(len(df)-1, df["MIN"].iloc[-1], f"MIN: {df['MIN'].iloc[-1]:.3f}",
+                color='orange', ha='right')
+
+        ax.set_title("품질 경향 분석")
         ax.legend()
         ax.grid()
 
         st.pyplot(fig)
 
-        # 요약
+        # ======================
+        # 📊 분석 결과 (강화)
+        # ======================
         total = len(df)
         ng = len(df[df["판정"] == "NG"])
+        ok = total - ng
 
-        st.success(f"총 {total}개 중 NG {ng}개")
+        st.markdown("### 📋 검사 결과 요약")
 
+        st.write(f"""
+        ▶ 총 데이터: {total}개  
+        ▶ OK: {ok}개 / NG: {ng}개  
+
+        📌 판정 결과:
+        """)
+
+        if ng == 0:
+            st.success("전체 양호 (모든 값이 규격 내)")
+        elif ng / total > 0.3:
+            st.error("NG 다수 발생 → 공정 이상 가능성 높음")
+        else:
+            st.warning("일부 NG 발생 → 공정 편차 존재")
+
+        # 경향 분석
+        avg = df["VALUE"].mean()
+
+        if avg > df["MAX"].mean():
+            st.error("전체적으로 상한 초과 경향")
+        elif avg < df["MIN"].mean():
+            st.error("전체적으로 하한 미달 경향")
+        else:
+            st.info("전체적으로 규격 내 분포")
 # =========================
 # 🧮 계산기
 # =========================
