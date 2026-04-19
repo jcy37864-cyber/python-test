@@ -168,6 +168,43 @@ elif menu == "그래프 분석":
             st.error("전체적으로 하한 미달 경향")
         else:
             st.info("전체적으로 규격 내 분포")
+# ------------------------
+# 🔥 WORST NG 찾기
+# ------------------------
+df["편차"] = df.apply(
+    lambda x: max(
+        x["VALUE"] - x["MAX"],
+        x["MIN"] - x["VALUE"],
+        0
+    ),
+    axis=1
+)
+
+worst_idx = df["편차"].idxmax()
+worst_row = df.loc[worst_idx]
+
+# ------------------------
+# 🔥 WORST 표시 (핵심)
+# ------------------------
+if worst_row["편차"] > 0:
+
+    ax.scatter(
+        worst_idx,
+        worst_row["VALUE"],
+        color='black',      # 눈에 확 띄게
+        s=200,
+        zorder=5
+    )
+
+    ax.text(
+        worst_idx,
+        worst_row["VALUE"],
+        f"WORST\n{worst_row['VALUE']:.3f}",
+        fontsize=10,
+        ha='center',
+        va='bottom',
+        color='black'
+    )
 # =========================
 # 🧮 계산기
 # =========================
