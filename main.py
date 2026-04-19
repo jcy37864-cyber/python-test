@@ -33,15 +33,15 @@ if menu == "ZXY 변환":
 
     st.subheader("🔄 ZXY 변환")
 
-    if "df" not in st.session_state:
-        st.session_state.df = pd.DataFrame({
+    if "df_zxy" not in st.session_state:
+        st.session_state.df_zxy = pd.DataFrame({
             "X": [""] * 100,
             "Y": [""] * 100,
             "Z": [""] * 100,
         })
 
     edited_df = st.data_editor(
-        st.session_state.df,
+        st.session_state.df_zxy,
         use_container_width=True
     )
 
@@ -63,11 +63,9 @@ if menu == "ZXY 변환":
         csv = result_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button("CSV 다운로드", csv, "zxy.csv")
 
+
 # =========================
 # 📈 그래프 분석
-# =========================
-# =========================
-# 📈 그래프 (최종 개선)
 # =========================
 elif menu == "그래프 분석":
 
@@ -90,6 +88,7 @@ elif menu == "그래프 분석":
 
     if uploaded_file:
 
+        # 파일 읽기
         if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
         else:
@@ -110,24 +109,61 @@ elif menu == "그래프 분석":
         st.dataframe(df.style.apply(highlight, axis=1))
 
         # ======================
-        # 📊 그래프 (핵심 개선)
+        # 📊 그래프
         # ======================
-        fig, ax = plt.subplots(figsize=(10, 4))  # ← 크기 줄임
+        fig, ax = plt.subplots(figsize=(10, 4))
 
         ax.plot(df["VALUE"], marker='o', label="VALUE")
         ax.plot(df["MIN"], linestyle='--', label="MIN")
         ax.plot(df["MAX"], linestyle='--', label="MAX")
 
-        # 🔴 NG 표시
+        # 🔴 NG 점 표시
         for i, row in df.iterrows():
             if row["판정"] == "NG":
                 ax.scatter(i, row["VALUE"], color='red', s=80)
 
-        # ✅ MIN/MAX 값 표시 (중요)
-        ax.text(len(df)-1, df["MAX"].iloc[-1], f"MAX: {df['MAX'].iloc[-1]:.3f}",
+        # ------------------------
+        # 🔥 WORST NG 찾기
+        # ------------------------
+        df["편차"] = df.apply(
+            lambda x: max(
+                x["VALUE"] - x["MAX"],
+                x["MIN"] - x["VALUE"],
+                0
+            ),
+            axis=1
+        )
+
+        worst_idx = df["편차"].idxmax()
+        worst_row = df.loc[worst_idx]
+
+        # 🔥 WORST 표시
+        if worst_row["편차"] > 0:
+            ax.scatter(
+                worst_idx,
+                worst_row["VALUE"],
+                color='black',
+                s=200,
+                zorder=5
+            )
+
+            ax.text(
+                worst_idx,
+                worst_row["VALUE"],
+                f"WORST\n{worst_row['VALUE']:.3f}",
+                fontsize=10,
+                ha='center',
+                va='bottom',
+                color='black'
+            )
+
+        # ✅ MIN/MAX 값 표시
+        ax.text(len(df)-1, df["MAX"].iloc[-1],
+                f"MAX: {df['MAX'].iloc[-1]:.3f}",
                 color='green', ha='right')
 
-        ax.text(len(df)-1, df["MIN"].iloc[-1], f"MIN: {df['MIN'].iloc[-1]:.3f}",
+        ax.text(len(df)-1, df["MIN"].iloc[-1],
+                f"MIN: {df['MIN'].iloc[-1]:.3f}",
                 color='orange', ha='right')
 
         ax.set_title("품질 경향 분석")
@@ -137,7 +173,7 @@ elif menu == "그래프 분석":
         st.pyplot(fig)
 
         # ======================
-        # 📊 분석 결과 (강화)
+        # 📊 분석 결과
         # ======================
         total = len(df)
         ng = len(df[df["판정"] == "NG"])
@@ -148,8 +184,6 @@ elif menu == "그래프 분석":
         st.write(f"""
         ▶ 총 데이터: {total}개  
         ▶ OK: {ok}개 / NG: {ng}개  
-
-        📌 판정 결과:
         """)
 
         if ng == 0:
@@ -168,43 +202,8 @@ elif menu == "그래프 분석":
             st.error("전체적으로 하한 미달 경향")
         else:
             st.info("전체적으로 규격 내 분포")
-# ------------------------
-# 🔥 WORST NG 찾기
-# ------------------------
-df["편차"] = df.apply(
-    lambda x: max(
-        x["VALUE"] - x["MAX"],
-        x["MIN"] - x["VALUE"],
-        0
-    ),
-    axis=1
-)
 
-worst_idx = df["편차"].idxmax()
-worst_row = df.loc[worst_idx]
 
-# ------------------------
-# 🔥 WORST 표시 (핵심)
-# ------------------------
-if worst_row["편차"] > 0:
-
-    ax.scatter(
-        worst_idx,
-        worst_row["VALUE"],
-        color='black',      # 눈에 확 띄게
-        s=200,
-        zorder=5
-    )
-
-    ax.text(
-        worst_idx,
-        worst_row["VALUE"],
-        f"WORST\n{worst_row['VALUE']:.3f}",
-        fontsize=10,
-        ha='center',
-        va='bottom',
-        color='black'
-    )
 # =========================
 # 🧮 계산기
 # =========================
@@ -244,7 +243,7 @@ elif menu == "계산기":
         tol = st.number_input("공차", 0.0)
         v = st.number_input("측정값", 0.0)
 
-        if t-tol <= v <= t+tol:
+        if t - tol <= v <= t + tol:
             st.success("OK")
         else:
             st.error("NG")
