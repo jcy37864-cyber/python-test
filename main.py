@@ -5,12 +5,23 @@ from io import BytesIO
 
 st.set_page_config(page_title="품질 측정 도구", layout="wide")
 
+# ---------------------
+# 🎨 사이드바 스타일 (검정/남색)
+# ---------------------
+st.markdown("""
+<style>
+[data-testid="stSidebar"] {
+    background-color: #0E1117;
+}
+[data-testid="stSidebar"] * {
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📊 품질 측정 통합 프로그램")
 
-# =========================
-# 📌 사이드 메뉴 (핵심)
-# =========================
-menu = st.sidebar.selectbox(
+menu = st.sidebar.radio(
     "메뉴 선택",
     ["ZXY 변환", "그래프 분석", "계산기"]
 )
@@ -47,29 +58,19 @@ if menu == "ZXY 변환":
                 results.extend([z, x, y])
 
         result_df = pd.DataFrame(results, columns=["결과"])
-        st.dataframe(result_df, use_container_width=True)
+        st.dataframe(result_df)
 
-        # 다운로드
         csv = result_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button("CSV 다운로드", csv, "zxy.csv")
 
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            result_df.to_excel(writer, index=False)
-
-        st.download_button("엑셀 다운로드", output.getvalue(), "zxy.xlsx")
-
-
 # =========================
-# 📈 그래프 (엑셀 업로드 복구)
+# 📈 그래프 분석
 # =========================
 elif menu == "그래프 분석":
 
     st.subheader("📈 품질 그래프 분석")
 
-    st.markdown("### 📥 엑셀 업로드 (MIN / MAX / VALUE)")
-
-    uploaded_file = st.file_uploader("엑셀 파일 업로드", type=["xlsx", "csv"])
+    uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx", "csv"])
 
     # 템플릿 다운로드
     template = pd.DataFrame({
@@ -82,51 +83,55 @@ elif menu == "그래프 분석":
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         template.to_excel(writer, index=False)
 
-    st.download_button(
-        "📄 템플릿 다운로드",
-        data=output.getvalue(),
-        file_name="template.xlsx"
-    )
+    st.download_button("📄 템플릿 다운로드", output.getvalue(), "template.xlsx")
 
     if uploaded_file:
 
-        try:
-            if uploaded_file.name.endswith(".csv"):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
 
-            df["판정"] = df.apply(
-                lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG",
-                axis=1
-            )
+        # 판정
+        df["판정"] = df.apply(
+            lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG",
+            axis=1
+        )
 
-            st.dataframe(df)
+        # 🔥 NG 색상 표시
+        def highlight(row):
+            if row["판정"] == "NG":
+                return ['background-color: red'] * len(row)
+            return [''] * len(row)
 
-            fig, ax = plt.subplots()
+        st.dataframe(df.style.apply(highlight, axis=1))
 
-            ax.plot(df["VALUE"], marker='o', label="VALUE")
-            ax.plot(df["MIN"], linestyle='--', label="MIN")
-            ax.plot(df["MAX"], linestyle='--', label="MAX")
+        # 그래프
+        fig, ax = plt.subplots()
 
-            # NG 빨간 표시
-            for i, row in df.iterrows():
-                if row["판정"] == "NG":
-                    ax.scatter(i, row["VALUE"], s=100)
+        ax.plot(df["VALUE"], marker='o', label="VALUE")
+        ax.plot(df["MIN"], linestyle='--', label="MIN")
+        ax.plot(df["MAX"], linestyle='--', label="MAX")
 
-            ax.legend()
-            ax.grid()
+        # NG 강조
+        for i, row in df.iterrows():
+            if row["판정"] == "NG":
+                ax.scatter(i, row["VALUE"], color='red', s=100)
 
-            st.pyplot(fig)
+        ax.set_title("품질 경향 그래프")
+        ax.legend()
+        ax.grid()
 
-            st.success(f"NG 개수: {len(df[df['판정']=='NG'])}")
+        st.pyplot(fig)
 
-        except Exception as e:
-            st.error("파일 형식 오류")
+        # 요약
+        total = len(df)
+        ng = len(df[df["판정"] == "NG"])
 
+        st.success(f"총 {total}개 중 NG {ng}개")
 
 # =========================
-# 🧮 계산기 (토크 포함)
+# 🧮 계산기
 # =========================
 elif menu == "계산기":
 
@@ -138,22 +143,17 @@ elif menu == "계산기":
     )
 
     if calc == "토크 변환":
-
-        val = st.number_input("값", value=0.0)
-
-        mode = st.selectbox(
-            "변환",
-            ["N·m → kgf·m", "kgf·m → N·m"]
-        )
+        val = st.number_input("값", 0.0)
+        mode = st.selectbox("변환", ["N·m → kgf·m", "kgf·m → N·m"])
 
         if mode == "N·m → kgf·m":
-            st.success(f"{val * 0.101972:.4f} kgf·m")
+            st.success(f"{val * 0.101972:.4f}")
         else:
-            st.success(f"{val * 9.80665:.4f} N·m")
+            st.success(f"{val * 9.80665:.4f}")
 
     elif calc == "합계":
-        a = st.number_input("A", value=0.0)
-        b = st.number_input("B", value=0.0)
+        a = st.number_input("A", 0.0)
+        b = st.number_input("B", 0.0)
         st.success(a + b)
 
     elif calc == "평균":
