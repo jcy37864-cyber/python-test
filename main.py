@@ -2,11 +2,25 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
+import matplotlib.font_manager as fm
+import platform
 
 st.set_page_config(page_title="품질 측정 도구", layout="wide")
 
 # ---------------------
-# 🎨 사이드바 스타일 (검정/남색)
+# 🎨 한글 폰트 깨짐 방지
+# ---------------------
+if platform.system() == 'Windows':
+    plt.rc('font', family='Malgun Gothic')
+elif platform.system() == 'Darwin':
+    plt.rc('font', family='AppleGothic')
+else:
+    plt.rc('font', family='NanumGothic')
+
+plt.rcParams['axes.unicode_minus'] = False
+
+# ---------------------
+# 🎨 사이드바 스타일
 # ---------------------
 st.markdown("""
 <style>
@@ -23,13 +37,13 @@ st.title("📊 품질 측정 통합 프로그램")
 
 menu = st.sidebar.radio(
     "메뉴 선택",
-    ["ZXY 변환", "그래프 분석", "계산기"]
+    ["🔄 ZXY 변환", "📈 그래프 분석", "🧮 계산기"]
 )
 
 # =========================
 # 🔄 ZXY 변환
 # =========================
-if menu == "ZXY 변환":
+if menu == "🔄 ZXY 변환":
 
     st.subheader("🔄 ZXY 변환")
 
@@ -67,7 +81,7 @@ if menu == "ZXY 변환":
 # =========================
 # 📈 그래프 분석
 # =========================
-elif menu == "그래프 분석":
+elif menu == "📈 그래프 분석":
 
     st.subheader("📈 품질 그래프 분석")
 
@@ -88,7 +102,6 @@ elif menu == "그래프 분석":
 
     if uploaded_file:
 
-        # 파일 읽기
         if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
         else:
@@ -117,10 +130,12 @@ elif menu == "그래프 분석":
         ax.plot(df["MIN"], linestyle='--', label="MIN")
         ax.plot(df["MAX"], linestyle='--', label="MAX")
 
-        # 🔴 NG 점 표시
+        # 🔴 NG 점
+        ng_indices = []
         for i, row in df.iterrows():
             if row["판정"] == "NG":
                 ax.scatter(i, row["VALUE"], color='red', s=80)
+                ng_indices.append(i)
 
         # ------------------------
         # 🔥 WORST NG 찾기
@@ -137,24 +152,16 @@ elif menu == "그래프 분석":
         worst_idx = df["편차"].idxmax()
         worst_row = df.loc[worst_idx]
 
-        # 🔥 WORST 표시
+        # 🔥 WORST 강조 (원 테두리 굵게)
         if worst_row["편차"] > 0:
             ax.scatter(
                 worst_idx,
                 worst_row["VALUE"],
-                color='black',
-                s=200,
+                facecolors='none',
+                edgecolors='red',
+                s=300,
+                linewidths=3,
                 zorder=5
-            )
-
-            ax.text(
-                worst_idx,
-                worst_row["VALUE"],
-                f"WORST\n{worst_row['VALUE']:.3f}",
-                fontsize=10,
-                ha='center',
-                va='bottom',
-                color='black'
             )
 
         # ✅ MIN/MAX 값 표시
@@ -193,7 +200,6 @@ elif menu == "그래프 분석":
         else:
             st.warning("일부 NG 발생 → 공정 편차 존재")
 
-        # 경향 분석
         avg = df["VALUE"].mean()
 
         if avg > df["MAX"].mean():
@@ -207,7 +213,7 @@ elif menu == "그래프 분석":
 # =========================
 # 🧮 계산기
 # =========================
-elif menu == "계산기":
+elif menu == "🧮 계산기":
 
     st.subheader("🧮 계산기")
 
