@@ -1,92 +1,65 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
+import plotly.express as px
 
-st.set_page_config(page_title="정밀 위치도 분석 시스템", layout="wide")
+# --- 디자인 설정 ---
+st.set_page_config(layout="wide")
+st.title("🎯 멀티 포인트 위치도 통합 분석 시스템")
 
-st.title("🎯 위치도(Position) 및 MMC 통합 분석 시스템")
-
-# --- 1. 사이드바: 공정 파라미터 설정 ---
-with st.sidebar:
-    st.header("⚙️ 공차 설정")
-    base_tolerance = st.number_input("기본 위치도 공차 (ø)", value=0.5, step=0.1)
-    use_mmc = st.checkbox("MMC(최대실체조건) 적용", value=True)
-    if use_mmc:
-        mmc_size = st.number_input("MMC 기준 치수 (최소 구멍 지름)", value=0.5, format="%.3f")
-
-# --- 2. 데이터 입력 (예시 구조) ---
-st.subheader("📝 측정 데이터 입력")
-# 실제로는 파일 업로드로 대체 가능합니다.
+# --- 1. 데이터 로드 부분 (포인트가 많으므로 리스트화) ---
+# 실제로는 엑셀 업로드 시 반복되는 패턴(위치도, X, Y)을 자동으로 추출하도록 구현합니다.
+points = ["E", "F", "G", "H", "I", "J", "K", "L"]
+# 샘플 데이터 (성적서 수치 기반)
 data = {
-    "Point": ["UL", "UR", "DL", "DR"],
-    "True_X": [-50.60, 0.00, -64.30, 13.70],
-    "True_Y": [0.00, 0.00, -92.50, -92.50],
-    "Measured_X": [-50.684, 0.000, -64.289, 13.731],
-    "Measured_Y": [0.000, 0.000, -92.497, -92.586],
-    "Hole_Size": [0.556, 0.524, 0.532, 0.550]  # MMC 계산용 실제 지름
+    "Point": points,
+    "True_X": [-55.70, -35.80, -14.80, 5.10, -45.50, -5.10, -55.70, 5.10],
+    "True_Y": [-38.80, -38.80, -38.80, -38.80, -54.70, -54.70, -70.30, -70.30],
+    "Measured_X": [-55.712, -35.789, -14.805, 5.102, -45.520, -5.095, -55.731, 5.115],
+    "Measured_Y": [-38.815, -38.802, -38.795, -38.810, -54.712, -54.690, -70.315, -70.305],
+    "Bonus": [0.05, 0.03, 0.04, 0.02, 0.06, 0.01, 0.05, 0.04], # MMC 보너스 가상 데이터
+    "Base_Tol": [0.30] * 8
 }
 df = pd.DataFrame(data)
 
-# --- 3. 위치도 및 MMC 보너스 계산 로직 ---
-df['Deviation_X'] = df['Measured_X'] - df['True_X']
-df['Deviation_Y'] = df['Measured_Y'] - df['True_Y']
-# 위치도 계산: 2 * sqrt(dx^2 + dy^2)
-df['Actual_Position'] = 2 * np.sqrt(df['Deviation_X']**2 + df['Deviation_Y']**2)
+# --- 2. 위치도 계산 로직 ---
+df['Dev_X'] = df['Measured_X'] - df['True_X']
+df['Dev_Y'] = df['Measured_Y'] - df['True_Y']
+df['Actual_Pos'] = 2 * np.sqrt(df['Dev_X']**2 + df['Dev_Y']**2)
+df['Final_Tol'] = df['Base_Tol'] + df['Bonus']
+df['Status'] = np.where(df['Actual_Pos'] <= df['Final_Tol'], "OK", "NG")
+df['Usage'] = (df['Actual_Pos'] / df['Final_Tol']) * 100
 
-if use_mmc:
-    df['Bonus'] = (df['Hole_Size'] - mmc_size).clip(lower=0)
-    df['Final_Tolerance'] = base_tolerance + df['Bonus']
-else:
-    df['Final_Tolerance'] = base_tolerance
-
-df['Status'] = np.where(df['Actual_Position'] <= df['Final_Tolerance'], "OK", "NG")
-df['Usage_Rate'] = (df['Actual_Position'] / df['Final_Tolerance']) * 100
-
-# --- 4. 시각화 (과녁 그래프) ---
-col1, col2 = st.columns([2, 1])
+# --- 3. 시각화 레이아웃 ---
+col1, col2 = st.columns([1, 1])
 
 with col1:
-    st.subheader("📍 위치 편차 분포 (과녁 차트)")
-    # 모든 포인트를 원점(0,0) 기준으로 정렬하여 분포 확인
-    fig_target = go.Figure()
-    
-    # 공차 원 그리기
-    max_tol = df['Final_Tolerance'].max()
-    fig_target.add_shape(type="circle", x0=-base_tolerance/2, y0=-base_tolerance/2, x1=base_tolerance/2, y1=base_tolerance/2,
-                         line_color="Red", line_dash="dash", name="Base Tolerance")
-    
-    # 측정 포인트 점 찍기
-    for i, row in df.iterrows():
-        fig_target.add_trace(go.Scatter(
-            x=[row['Deviation_X']], y=[row['Deviation_Y']],
-            mode='markers+text',
-            name=row['Point'],
-            text=[row['Point']],
-            textposition="top center",
-            marker=dict(size=12, color='Green' if row['Status'] == "OK" else 'Red')
-        ))
-
-    fig_target.update_layout(
-        xaxis=dict(title="X 편차", range=[-0.5, 0.5]),
-        yaxis=dict(title="Y 편차", range=[-0.5, 0.5], scaleanchor="x", scaleratio=1),
-        width=600, height=600, template="plotly_white"
-    )
-    st.plotly_chart(fig_target)
+    st.subheader("📍 전 포인트 편차 분포")
+    fig = go.Figure()
+    # 공차 한계선 (기준 0.3)
+    fig.add_shape(type="circle", x0=-0.15, y0=-0.15, x1=0.15, y1=0.15, 
+                  line=dict(color="Red", dash="dash"))
+    # 포인트 찍기
+    fig.add_trace(go.Scatter(x=df['Dev_X'], y=df['Dev_Y'], mode='markers+text',
+                             text=df['Point'], textposition="top right",
+                             marker=dict(size=10, color=df['Usage'], colorscale='RdYlGn_r', showscale=True)))
+    fig.update_layout(xaxis_title="X 편차", yaxis_title="Y 편차", height=500, width=500)
+    st.plotly_chart(fig)
 
 with col2:
-    st.subheader("📊 공차 소진율 (%)")
-    fig_bar = px.bar(df, x='Point', y='Usage_Rate', color='Status',
-                     color_discrete_map={'OK': '#10b981', 'NG': '#e11d48'},
-                     range_y=[0, 120])
+    st.subheader("📊 포인트별 공차 소진율")
+    fig_bar = px.bar(df, x='Point', y='Usage', color='Usage', 
+                     color_continuous_scale='RdYlGn_r', range_y=[0, 100])
     fig_bar.add_hline(y=100, line_dash="dash", line_color="red")
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar)
 
-# --- 5. 결과 테이블 ---
-st.subheader("📋 상세 분석 데이터")
-st.dataframe(df.style.format({
-    'Actual_Position': '{:.4f}',
-    'Final_Tolerance': '{:.4f}',
-    'Usage_Rate': '{:.1f}%'
-}).apply(lambda x: ['background-color: #ffcccc' if v == "NG" else '' for v in x], subset=['Status']))
+# --- 4. 요약 리포트 ---
+st.subheader("📝 종합 분석 결과")
+ng_points = df[df['Status'] == "NG"]['Point'].tolist()
+if not ng_points:
+    st.success(f"✅ 모든 포인트 ({len(df)}개) 규격 내 만족")
+else:
+    st.error(f"🚨 부적합 포인트 발견: {ng_points}")
+
+st.table(df[['Point', 'Actual_Pos', 'Final_Tol', 'Status', 'Usage']])
