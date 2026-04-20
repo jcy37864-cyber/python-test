@@ -4,22 +4,38 @@ import numpy as np
 import plotly.graph_objects as go
 from io import BytesIO
 
-# --- 1. 페이지 설정 및 디자인 ---
-st.set_page_config(page_title="위치도 분석 시스템 v2.8", layout="wide")
+# --- 1. 페이지 설정 ---
+st.set_page_config(page_title="위치도 분석 시스템 v2.9", layout="wide")
 
+# 디자인 설정
 st.markdown("""
     <style>
     .stBox { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .summary-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 2px solid #3b82f6; margin-top: 30px; }
-    .status-ok { color: #16a34a; font-weight: bold; font-size: 1.2rem; }
-    .status-ng { color: #dc2626; font-weight: bold; font-size: 1.2rem; }
+    .status-ok { color: #16a34a; font-weight: bold; font-size: 1.1rem; }
+    .status-ng { color: #dc2626; font-weight: bold; font-size: 1.1rem; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🎯 위치도 정밀 분석 및 보고서 자동화")
+st.title("🎯 위치도 정밀 분석 시스템")
 
-# --- 2. 함수 정의 (이미지 포함 엑셀 생성) ---
-def get_korean_template():
+# --- 2. 초기화 기능 로직 ---
+if 'reset_key' not in st.session_state:
+    st.session_state.reset_key = 0
+
+def reset_app():
+    st.session_state.reset_key += 1
+    st.rerun()
+
+# 사이드바 설정
+with st.sidebar:
+    st.header("⚙️ 제어판")
+    if st.button("🔄 데이터 초기화 (Reset)", use_container_width=True):
+        reset_app()
+    st.info("초기화 버튼을 누르면 업로드된 파일이 제거되고 기본 상태로 돌아갑니다.")
+
+# --- 3. 함수 정의 ---
+def get_template():
     df_temp = pd.DataFrame({
         "측정포인트": ["E", "F", "G", "H", "I", "J", "K", "L"],
         "기본공차": [0.30] * 8,
@@ -37,42 +53,31 @@ def get_korean_template():
 def create_excel_report(dataframe, plotly_fig):
     output_excel = BytesIO()
     try:
-        # Kaleido 패키지가 있어야 이미지 변환 가능
         img_bytes = plotly_fig.to_image(format="png", width=600, height=600)
     except:
         img_bytes = None
     
     with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
         dataframe.to_excel(writer, sheet_name='분석결과', index=False)
-        workbook = writer.book
         worksheet = writer.sheets['분석결과']
-        
-        # 스타일 및 이미지 삽입
-        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
-        for col_num, value in enumerate(dataframe.columns.values):
-            worksheet.write(0, col_num, value, header_fmt)
-            worksheet.set_column(col_num, col_num, 15)
-            
         if img_bytes:
-            image_data = BytesIO(img_bytes)
-            worksheet.insert_image('I2', 'graph.png', {'image_data': image_data, 'x_scale': 0.7, 'y_scale': 0.7})
-            
+            worksheet.insert_image('I2', 'graph.png', {'image_data': BytesIO(img_bytes), 'x_scale': 0.7, 'y_scale': 0.7})
     return output_excel.getvalue()
 
-# --- 3. 데이터 입력부 ---
-with st.expander("📂 템플릿 및 파일 업로드", expanded=True):
+# --- 4. 데이터 입력 ---
+with st.expander("📂 데이터 입력 (템플릿 및 업로드)", expanded=True):
     c1, c2 = st.columns([1, 2])
     with c1:
-        st.download_button("📥 한글 양식 다운로드", data=get_korean_template(), file_name="위치도_양식.xlsx")
+        st.download_button("📥 한글 양식 다운로드", data=get_template(), file_name="위치도_양식.xlsx", use_container_width=True)
         mmc_val = st.number_input("MMC 기준값(최소지름)", value=0.500, format="%.3f")
     with c2:
-        file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"])
+        # reset_key를 사용하여 업로드 컴포넌트 강제 초기화
+        file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"], key=f"uploader_{st.session_state.reset_key}")
 
 # 데이터 로딩
 if file:
     df = pd.read_excel(file)
 else:
-    # 샘플 데이터
     df = pd.DataFrame({
         "측정포인트": ["E", "F", "G", "H", "I", "J", "K", "L"],
         "기본공차": [0.30] * 8,
@@ -83,17 +88,17 @@ else:
         "실측지름_MMC용": [0.556, 0.524, 0.532, 0.550, 0.510, 0.505, 0.560, 0.545]
     })
 
-# --- 4. 계산 및 그래프 생성 ---
+# --- 5. 계산 및 그래프 생성 ---
 df['X편차'] = df['측정치_X'] - df['도면치수_X']
 df['Y편차'] = df['측정치_Y'] - df['도면치수_Y']
 df['위치도결과'] = 2 * np.sqrt(df['X편차']**2 + df['Y편차']**2)
 df['보너스'] = (df['실측지름_MMC용'] - mmc_val).clip(lower=0)
 df['최종공차'] = df['기본공차'] + df['보너스']
 df['판정'] = np.where(df['위치도결과'] <= df['최종공차'], "OK", "NG")
-df['소진율'] = (df['위치도결과'] / df['최종공차']) * 100
+df['소진율(%)'] = (df['위치도결과'] / df['최종공차']) * 100
 
+# 그래프 생성
 fig = go.Figure()
-# 손그림 디자인 (파란색/보라색)
 fig.add_shape(type="circle", x0=-0.15, y0=-0.15, x1=0.15, y1=0.15, line=dict(color="blue", width=2))
 max_t = df['최종공차'].max()
 fig.add_shape(type="circle", x0=-max_t/2, y0=-max_t/2, x1=max_t/2, y1=max_t/2, 
@@ -105,28 +110,39 @@ for _, row in df.iterrows():
                              mode='markers+text', text=[row['측정포인트']], textposition="top center",
                              marker=dict(size=12, color=color, line=dict(width=1, color='white'))))
 
-fig.update_layout(xaxis=dict(range=[-0.3, 0.3]), yaxis=dict(range=[-0.3, 0.3], scaleanchor="x", scaleratio=1),
+fig.update_layout(xaxis=dict(range=[-0.3, 0.3], title="X 편차"), 
+                  yaxis=dict(range=[-0.3, 0.3], scaleanchor="x", scaleratio=1, title="Y 편차"),
                   height=600, template="plotly_white")
 
+# 화면 출력
+st.markdown('<div class="stBox">', unsafe_allow_html=True)
+st.subheader("🌐 편차 분포 과녁 차트")
 st.plotly_chart(fig, use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 5. 요약 및 다운로드 ---
+# --- 6. [추가된 기능] 데이터 상세 표 ---
+st.markdown('<div class="stBox">', unsafe_allow_html=True)
+st.subheader("📋 분석 데이터 상세 정보")
+st.dataframe(df.style.applymap(lambda x: 'color: red; font-weight: bold' if x == 'NG' else '', subset=['판정']), 
+             use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# --- 7. 하단 요약 및 보고서 ---
 st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-st.subheader("📊 최종 분석 보고")
+st.subheader("📊 품질 분석 요약")
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.write(f"**총 검사:** {len(df)} 건")
+    st.write(f"**검사 건수:** {len(df)}개")
     st.write(f"**합격/불합격:** {len(df[df['판정']=='OK'])} / {len(df[df['판정']=='NG'])}")
 
 with c2:
     if len(df[df['판정']=="NG"]) == 0:
-        st.markdown('<p class="status-ok">✅ 규격 만족</p>', unsafe_allow_html=True)
+        st.markdown('<p class="status-ok">✅ 모든 포인트 규격 합격</p>', unsafe_allow_html=True)
     else:
-        st.markdown('<p class="status-ng">🚨 불합격 발생</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="status-ng">🚨 불합격 포인트 {len(df[df['판정']=="NG"])}개 발생</p>', unsafe_allow_html=True)
 
 with c3:
-    # 엑셀 다운로드 버튼 (안전하게 호출)
-    rpt = create_excel_report(df, fig)
-    st.download_button("🚀 이미지 포함 엑셀 보고서 저장", data=rpt, file_name="위치도_보고서.xlsx", use_container_width=True)
+    report = create_excel_report(df, fig)
+    st.download_button("🚀 이미지 포함 엑셀 보고서 저장", data=report, file_name="위치도_분석보고서.xlsx", use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
