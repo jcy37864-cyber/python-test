@@ -313,45 +313,41 @@ def main():
     
     st.sidebar.title("💎 QUALITY HUB v9.5")
     
-    # 순서를 중요도와 분석 흐름 중심으로 변경
+    # 상위 메뉴를 크게 분류
     menu = st.sidebar.radio(
         "📂 분석 카테고리", 
         [
-            "🎯 위치도(MMC) 분석",      # 메인 1
-            "📈 멀티 캐비티 분석",       # 메인 2
-            "📑 성적서 데이터 변환기",    # 보조 도구 (위치도용)
-            "📐 XYZ 좌표 변환기",      # 보조 도구 (수동/Z축)
-            "🧮 품질 통합 계산기"        # 단순 계산기
+            "🎯 위치도 정밀 분석",  # 하위 메뉴를 포함한 큰 폴더
+            "📈 멀티 캐비티 분석",
+            "📐 XYZ 좌표 변환기",
+            "🧮 품질 통합 계산기"
         ], 
         key=f"m_{st.session_state.reset_key}"
     )
     
     st.sidebar.markdown("---")
-    
     if st.sidebar.button("🗑️ 모든 데이터 리셋"):
-        st.session_state.reset_key += 1
-        st.session_state.data = None
-        st.rerun()
+        st.session_state.reset_key += 1; st.session_state.data = None; st.rerun()
 
-    # 실행 로직 순서도 메뉴와 일치시킵니다.
-    if menu == "🎯 위치도(MMC) 분석":
-        st.caption("📍 변환된 데이터를 바탕으로 실시간 위치도 합불 판정 및 시각화를 수행합니다.")
-        run_position_analysis()
+    # --- 페이지 본문 제어 ---
+    if menu == "🎯 위치도 정밀 분석":
+        st.subheader("🎯 위치도 정밀 분석 시스템")
+        # 탭을 사용하여 '하위 폴더' 기능을 구현합니다.
+        tab_convert, tab_analysis = st.tabs(["Step 1. 성적서 데이터 변환", "Step 2. 위치도 결과 분석"])
         
+        with tab_convert:
+            run_data_converter() # 성적서 복사 붙여넣는 곳
+            
+        with tab_analysis:
+            run_position_analysis() # 변환된 데이터로 차트 보는 곳
+
     elif menu == "📈 멀티 캐비티 분석":
-        st.caption("📍 핀 높이 등 여러 캐비티의 통합 데이터 트렌드를 분석합니다.")
         run_cavity_analysis()
         
-    elif menu == "📑 성적서 데이터 변환기":
-        st.caption("📍 엑셀 성적서를 복사해 '위치도 분석'용 표로 자동 변환합니다.")
-        run_data_converter()
-        
     elif menu == "📐 XYZ 좌표 변환기":
-        st.caption("📍 수동 좌표 입력 및 Z축 오프셋(Offset) 연산을 지원합니다.")
         run_xyz_transformer()
         
     elif menu == "🧮 품질 통합 계산기":
-        st.caption("📍 단위 환산, 토크 변환 등 공정 필수 계산 도구 모음입니다.")
         run_quality_calculator()
 
 if __name__ == "__main__":
