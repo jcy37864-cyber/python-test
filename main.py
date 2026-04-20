@@ -61,7 +61,7 @@ st.title("📊 품질 측정 통합 시스템")
 # =========================
 # 🛠️ 사이드바 메뉴 및 가이드
 # =========================
-st.sidebar.title("🚀 주요 기능")
+st.sidebar.title("🚀 정밀측정")
 menu = st.sidebar.radio("📋 메뉴 선택", ["🔄 ZXY 변환", "📈 그래프 분석", "🧮 계산기"])
 
 st.sidebar.markdown("---")
