@@ -241,14 +241,15 @@ def run_quality_calculator():
 def main():
     set_global_style()
     
+    # 1. 초기화 버튼 부분 수정
     if st.button("🗑️ 데이터 초기화"):
-    # 버튼을 눌렀을 때 실행될 내용들은 모두 '안으로 한 칸' 들어가야 합니다.
+        # 이 아래 줄들은 모두 키보드 'Tab' 키를 한 번씩 눌러서 안으로 밀어넣어야 합니다.
         if 'reset_key' not in st.session_state:
-        st.session_state.reset_key = 0  # 이 줄은 if문 안이라서 두 칸 들어감
-    
+            st.session_state.reset_key = 0  
+        
         st.session_state.reset_key += 1
         st.session_state.data = None
-        st.rerun()
+        st.rerun()  # 여기까지가 버튼을 눌렀을 때 실행되는 구역입니다.
     
     st.sidebar.title("💎 품질 플랫폼 v9.5")
     menu = st.sidebar.radio("📋 업무 선택", 
