@@ -124,6 +124,62 @@ def run_data_converter():
         else:
             st.warning("내용을 입력해주세요.")
 
+def run_xyz_transformer():
+    """메뉴 1: XYZ 좌표 데이터 변환기 """
+    st.header("📐 XYZ 좌표 데이터 변환기")
+    st.info("💡 X, Y, Z 좌표 데이터를 입력하고 오프셋(Offset) 연산 등을 수행합니다.")
+
+    # 1. 오프셋 설정 입력
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        off_x = st.number_input("X 오프셋", value=0.0, format="%.3f")
+    with col2:
+        off_y = st.number_input("Y 오프셋", value=0.0, format="%.3f")
+    with col3:
+        off_z = st.number_input("Z 오프셋", value=0.0, format="%.3f")
+
+    # 2. 데이터 입력창
+    raw_xyz = st.text_area("XYZ 데이터를 붙여넣으세요 (형식: 이름 X Y Z)", height=250, 
+                          placeholder="P1  10.521  20.332  5.001\nP2  11.244  20.115  5.102")
+
+    if st.button("🔄 좌표 연산 및 데이터 저장"):
+        if raw_xyz:
+            try:
+                # 공백으로 데이터 분리
+                lines = [re.split(r'\s+', line.strip()) for line in raw_xyz.strip().split('\n')]
+                
+                processed_xyz = []
+                for l in lines:
+                    if len(l) >= 4:  # 이름, X, Y, Z 최소 4개 항목 필요
+                        name = l[0]
+                        orig_x = clean_float(l[1])
+                        orig_y = clean_float(l[2])
+                        orig_z = clean_float(l[3])
+                        
+                        processed_xyz.append({
+                            "측정포인트": name,
+                            "기본공차": 0.35,
+                            "도면치수_X": 0.0, # 필요시 수정
+                            "도면치수_Y": 0.0,
+                            "측정치_X": orig_x + off_x,
+                            "측정치_Y": orig_y + off_y,
+                            "측정치_Z": orig_z + off_z, # Z값 저장
+                            "실측지름_MMC용": 0.35
+                        })
+                
+                if processed_xyz:
+                    df_xyz = pd.DataFrame(processed_xyz)
+                    st.success(f"✅ {len(processed_xyz)}개의 좌표를 변환했습니다.")
+                    st.dataframe(df_xyz)
+                    
+                    # 세션에 저장 (위치도 분석에서 사용 가능하도록)
+                    st.session_state.data = df_xyz
+                    st.balloons()
+                else:
+                    st.error("데이터 형식을 확인해주세요. (이름 X Y Z)")
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
+
 def run_cavity_analysis():
     """메뉴 2: 멀티 캐비티 분석"""
     st.title("📊 핀 높이 멀티 캐비티 통합 분석")
@@ -263,7 +319,13 @@ def main():
     # 초기화 버튼을 누르면 이 key 값이 바뀌면서 메뉴가 리셋됩니다.
     menu = st.sidebar.radio(
         "📋 업무 선택", 
-        ["🔄 데이터 변환기", "📈 멀티 캐비티 분석", "🎯 위치도(MMC) 분석", "🧮 품질 계산기"], 
+        [
+            "📑 성적서 자동 변환",  # 이름 변경
+            "📐 XYZ 좌표 변환",    # 신규 추가
+            "📈 멀티 캐비티 분석", 
+            "🎯 위치도(MMC) 분석", 
+            "🧮 품질 계산기"
+        ], 
         key=f"m_{st.session_state.reset_key}"
     )
     
@@ -276,8 +338,10 @@ def main():
         st.rerun()
 
     # 4. 선택된 메뉴에 따른 화면 출력
-    if menu == "🔄 데이터 변환기":
+    if menu == "📑 성적서 자동 변환":
         run_data_converter()
+    elif menu == "📐 XYZ 좌표 변환":
+        run_xyz_transformer()  # 아래에서 새로 만들 함수
     elif menu == "📈 멀티 캐비티 분석":
         run_cavity_analysis()
     elif menu == "🎯 위치도(MMC) 분석":
