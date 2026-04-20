@@ -305,56 +305,61 @@ def run_position_analysis():
             except AttributeError:
                 st.dataframe(final_display.style.applymap(highlight_pass_fail, subset=['판정']), use_container_width=True)
 
-           # 3. 🎨 위치도 산포도 분석 (영역 구분 버전)
+           # 3. 🎨 위치도 산포도 분석 (정상 스케일링 버전)
             st.divider()
             st.subheader("🎯 위치도 산포도 분석 (Basic vs MMC Zone)")
             
             fig, ax = plt.subplots(figsize=(8, 8))
             
-            # 데이터 편차 계산
+            # 편차 계산
             dev_x = df_m['측정치_X'] - df_m['도면치수_X']
             dev_y = df_m['측정치_Y'] - df_m['도면치수_Y']
             
             # 🔵 1. 기본 공차 영역 (Ø0.35)
             basic_radius = 0.35 / 2
-            circle_basic = plt.Circle((0, 0), basic_radius, color='#3498db', fill=True, 
-                                      alpha=0.15, linestyle='--', label='Basic Tolerance (Ø0.35)')
-            ax.add_patch(circle_basic)
-            # 기본 공차 테두리
-            ax.add_patch(plt.Circle((0, 0), basic_radius, color='#3498db', fill=False, linestyle='--', linewidth=1.5))
+            ax.add_patch(plt.Circle((0, 0), basic_radius, color='#3498db', fill=True, alpha=0.15, linestyle='--'))
+            ax.add_patch(plt.Circle((0, 0), basic_radius, color='#3498db', fill=False, linestyle='--', linewidth=1.5, label='Basic Tol (Ø0.35)'))
 
             # 🔴 2. MMC 확장 공차 영역 (최종 공차)
-            # 샘플 중 가장 큰 공차를 시각적 기준으로 표시
-            max_final_tol = df_m['최종공차'].max()
-            max_radius = max_final_tol / 2
-            circle_mmc = plt.Circle((0, 0), max_radius, color='#e74c3c', fill=False, 
-                                    linewidth=2, label=f'Max MMC Allowed (Ø{max_final_tol:.3f})')
-            ax.add_patch(circle_mmc)
+            # [수정] max() 대신 median()이나 평균을 사용하거나, 데이터에 따라 다르게 표현하는 것이 정석이나,
+            # 현재 스케일 문제 해결을 위해 median()을 임시 사용
+            representative_final_tol = df_m['최종공차'].median() 
+            mmc_radius = representative_final_tol / 2
+            ax.add_patch(plt.Circle((0, 0), mmc_radius, color='#e74c3c', fill=False, linewidth=2, label=f'Median MMC Tol (Ø{representative_final_tol:.3f})'))
             
             # 🟢 3. 측정 데이터 포인트
-            # 판정에 따라 점 색상 변경
             colors = df_m['판정'].apply(lambda x: '#2ecc71' if 'OK' in x else '#e74c3c')
-            ax.scatter(dev_x, dev_y, c=colors, s=70, edgecolors='white', zorder=5, label='Measured Points')
+            ax.scatter(dev_x, dev_y, c=colors, s=60, edgecolors='white', zorder=5, label='Measured Points')
             
-            # 그래프 레이아웃 설정
-            ax.axhline(0, color='black', linewidth=1.2) # X축 중심선
-            ax.axvline(0, color='black', linewidth=1.2) # Y축 중심선
+            # 그래프 꾸미기
+            ax.axhline(0, color='black', linewidth=1.2)
+            ax.axvline(0, color='black', linewidth=1.2)
             ax.set_xlabel("Deviation X", fontsize=12)
             ax.set_ylabel("Deviation Y", fontsize=12)
             ax.set_title("Position Error: Basic vs MMC Extension", fontsize=14, fontweight='bold', pad=20)
             
             ax.grid(True, linestyle=':', alpha=0.6)
-            ax.set_aspect('equal') # 1:1 비율 유지 (원형 보존)
+            ax.set_aspect('equal')
             
-            # 범례 표시
+            # 범례 추가
             ax.legend(loc='upper right', frameon=True, shadow=True)
             
-            # 축 범위 자동 설정 (공차원의 110% 수준으로만 확대)
-            limit = max_radius * 1.1
+            # --- [핵심 수정] 축 범위 자동 설정 (스케일링 해결) ---
+            # 공차 영역(Max, Basic)과 데이터 포인트 전체 영역 중 더 큰 값을 기준으로 설정
+            
+            # 1. 공차 영역 반경 (Max, Basic 중 큰 값)
+            tol_radius = max(basic_radius, mmc_radius)
+            
+            # 2. 데이터 포인트 전체 영역 반경
+            data_radius = pd.concat([dev_x, dev_y]).abs().max()
+            
+            # 3. 축 범위 설정 (두 영역 중 큰 값의 1.2배 여유)
+            limit = max(tol_radius, data_radius) * 1.2
             ax.set_xlim(-limit, limit)
             ax.set_ylim(-limit, limit)
             
             st.pyplot(fig)
+            
             # 통계 출력
             ok_count = (df_m['판정'] == "✅ OK").sum()
             st.success(f"✅ 분석 완료: 전체 {len(df_m)}개 중 {ok_count}개 합격")
