@@ -165,12 +165,39 @@ elif menu == "📈 그래프 분석":
         c1, c2, c3 = st.columns(3)
         avg_v = df['VALUE'].mean()
         with c1:
-            st.info("📊 **데이터 정보**")
-            msg = f"✅ 모든 샘플 정상." if not len(ng_df) else f"🚨 {len(ng_df)}개의 불량 발견 (No.{worst_idx} 주의)"
-            st.markdown(f'<div class="summary-box">{msg}</div>', unsafe_allow_html=True)
-        with c2: st.metric("평균값", f"{avg_v:.4f}")
-        with c3: st.metric("최대 이탈", f"{worst_val:.4f}" if df.loc[worst_idx, "편차"] > 0 else "N/A")
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.info("📊 **데이터 상세 요약**")
+            
+            # 기본 통계량 계산
+            total_count = len(df)
+            ng_count = len(ng_df)
+            ok_count = total_count - ng_count
+            ng_rate = (ng_count / total_count) * 100
+            
+            # 메트릭 레이아웃
+            m1, m2 = st.columns(2)
+            m1.metric("총 샘플수", f"{total_count}개")
+            m2.metric("불량률(%)", f"{ng_rate:.1f}%", f"-{ng_count} NG", delta_color="inverse")
+
+            # [핵심] 한글 상세 분석 요약 박스
+            st.markdown("**📝 품질 상태 분석**")
+            if ng_count == 0:
+                summary_msg = (
+                    f"✅ **공정 안정:** 현재 모든 데이터가 규격 내에 존재합니다. "
+                    f"평균값({avg_v:.4f})이 타겟에 근접하며, 산포(σ)가 {df['VALUE'].std():.4f}로 낮아 "
+                    f"매우 안정적인 품질 상태를 보이고 있습니다."
+                )
+            else:
+                summary_msg = (
+                    f"🚨 **품질 주의:** 총 {total_count}개 중 {ng_count}개의 규격 이탈이 발생했습니다. "
+                    f"**최대 이탈 지점은 No.{worst_idx}(값: {worst_val:.4f})**이며, "
+                    f"평균({avg_v:.4f})이 한쪽으로 치우쳐 있는지 점검이 필요합니다."
+                )
+            
+            st.markdown(f'<div class="summary-box">{summary_msg}</div>', unsafe_allow_html=True)
+            
+            # 추가 정보 (현장에서 좋아하는 지표)
+            st.write("")
+            st.caption(f"📍 CP(산포): {(df['MAX'].iloc[0]-df['MIN'].iloc[0])/(6*df['VALUE'].std()+1e-6):.2f} (참고용)")
 
 # =========================
 # 🧮 3. 계산기 (MMC 및 정밀 측정)
