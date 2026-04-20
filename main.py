@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from io import BytesIO
 
 # --- 1. 페이지 설정 및 디자인 ---
-st.set_page_config(page_title="품질 통합 분석 시스템 v7.1", layout="wide")
+st.set_page_config(page_title="품질 통합 분석 시스템 v7.2", layout="wide")
 
 st.markdown("""
     <style>
@@ -15,22 +15,18 @@ st.markdown("""
     }
     .ng-text { color: #e11d48; font-weight: bold; }
     .ok-text { color: #10b981; font-weight: bold; }
-    .report-text { font-size: 1.05em; line-height: 1.8; color: #1e293b; white-space: pre-wrap; }
-    /* 큰 버튼 스타일 커스텀 */
-    div.stButton > button {
-        width: 100%;
-        height: 3em;
-        font-size: 1.1em !important;
-        font-weight: bold !important;
-        margin-bottom: 10px;
-    }
+    .report-text { font-size: 1.05em; line-height: 1.8; color: #1e293b; white-space: pre-wrap; font-family: sans-serif; }
+    
+    /* 하단 대형 버튼 스타일 */
     div.stDownloadButton > button {
-        width: 100%;
-        height: 3em;
-        font-size: 1.1em !important;
+        width: 100% !important;
+        height: 4em !important;
+        font-size: 1.2em !important;
         font-weight: bold !important;
         background-color: #1e293b !important;
         color: white !important;
+        border-radius: 10px;
+        margin-top: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -59,7 +55,6 @@ with col_file:
 
 if uploaded_file:
     try:
-        # 데이터 로드 및 보정
         df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
         df.columns = [str(c).strip() for c in df.columns]
         if 'Point' not in df.columns: df.rename(columns={df.columns[0]: 'Point'}, inplace=True)
@@ -72,7 +67,7 @@ if uploaded_file:
         y_range = [float(all_vals.min()) - 0.02, float(all_vals.max()) + 0.02]
         cav_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd']
 
-        # --- 3. [위치변경] 캐비티별 개별 분포 상세 보기 (항상 펴짐) ---
+        # --- 3. 캐비티별 상세 분포 분석 (항상 노출) ---
         st.subheader("🔍 캐비티별 상세 분포 분석")
         c_grid = st.columns(2)
         summary_results = []
@@ -88,14 +83,15 @@ if uploaded_file:
                 b_colors = ['#ef4444' if p == "NG" else cav_colors[i % 4] for p in df[f"{cav}_판정"]]
                 fig_ind.add_trace(go.Bar(x=df["Point"], y=df[cav], marker_color=b_colors, name="측정값"))
                 
-                fig_ind.update_layout(title=f"<b>{cav} 개별 데이터</b>", yanchor="top", yaxis_range=y_range, height=300, margin=dict(l=10, r=10, t=40, b=10))
+                # 오류 수정: yanchor 제거
+                fig_ind.update_layout(title=f"<b>{cav} 개별 데이터</b>", yaxis_range=y_range, height=300, margin=dict(l=10, r=10, t=40, b=10))
                 st.plotly_chart(fig_ind, use_container_width=True)
                 
                 ng_cnt = len(df[df[f"{cav}_판정"] == "NG"])
                 summary_results.append({"cav": cav, "ng": ng_cnt, "total": len(df), "color": cav_colors[i % 4]})
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- 4. 품질현황 대쉬보드 (요약 카드) ---
+        # --- 4. 품질현황 요약 대쉬보드 ---
         st.subheader("📋 품질현황 요약 대쉬보드")
         d_cols = st.columns(len(summary_results))
         for i, res in enumerate(summary_results):
@@ -128,7 +124,7 @@ if uploaded_file:
         st.plotly_chart(fig_total, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- 6. [복구] 분석결과 리포트 (글자 형태) ---
+        # --- 6. 분석결과 리포트 (글자 형태) ---
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
         st.subheader("📝 품질 분석 상세 리포트")
         
@@ -152,26 +148,23 @@ if uploaded_file:
         st.markdown(f'<div class="report-text">{report_content}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- 7. [신규] 하단 통합 다운로드 섹션 (버튼 크게) ---
-        st.markdown("### 💾 보고서 및 데이터 내보내기")
-        btn_col1, btn_col2 = st.columns(2)
+        # --- 7. 하단 대형 다운로드 버튼 섹션 ---
+        st.markdown("### 💾 결과물 저장")
         
-        with btn_col1:
-            # 이미지 다운로드 가이드 버튼 (Plotly 자체 기능을 버튼화한 것처럼 안내)
-            st.info("💡 위 그래프 우측 상단 '카메라 아이콘'을 클릭하면 PNG 이미지로 저장됩니다.")
-            
-        with btn_col2:
-            # 엑셀 다운로드 버튼
-            output_res = BytesIO()
-            with pd.ExcelWriter(output_res, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False)
-            
-            st.download_button(
-                label="📥 분석 결과 엑셀(XLSX) 파일 다운로드",
-                data=output_res.getvalue(),
-                file_name="Quality_Analysis_Report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        # 엑셀 다운로드
+        output_res = BytesIO()
+        with pd.ExcelWriter(output_res, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False)
+        
+        st.download_button(
+            label="📥 분석 결과 엑셀(XLSX) 파일로 저장하기",
+            data=output_res.getvalue(),
+            file_name="Quality_Analysis_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+        
+        st.info("💡 그래프 이미지는 각 그래프 우측 상단의 '카메라 아이콘'을 클릭하여 PNG로 즉시 저장할 수 있습니다.")
 
     except Exception as e:
         st.error(f"분석 중 오류 발생: {e}")
