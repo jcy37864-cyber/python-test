@@ -242,13 +242,13 @@ def main():
     set_global_style()
     
     if st.button("🗑️ 데이터 초기화"):
-    # 에러 방지용 안전한 코드
+    # 버튼을 눌렀을 때 실행될 내용들은 모두 '안으로 한 칸' 들어가야 합니다.
     if 'reset_key' not in st.session_state:
-        st.session_state.reset_key = 0
+        st.session_state.reset_key = 0  # 이 줄은 if문 안이라서 두 칸 들어감
     
-    st.session_state.reset_key += 1  # 이제 확실히 1을 더함
-    st.session_state.data = None    # 데이터도 삭제
-    st.rerun()                      # 화면 새로고침
+    st.session_state.reset_key += 1
+    st.session_state.data = None
+    st.rerun()
     
     st.sidebar.title("💎 품질 플랫폼 v9.5")
     menu = st.sidebar.radio("📋 업무 선택", 
