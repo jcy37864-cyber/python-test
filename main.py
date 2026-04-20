@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import re  # <--- [추가] 텍스트에서 숫자/글자 패턴 찾을 때 필수!
 from io import BytesIO
 
 # ==========================================
@@ -259,90 +261,91 @@ def run_cavity_analysis():
         st.download_button("📥 분석 결과 엑셀 저장", out_cav.getvalue(), "Cavity_Result.xlsx")
         st.markdown('</div>', unsafe_allow_html=True)
 
+import matplotlib.pyplot as plt
+
 def run_position_analysis():
     st.header("📊 Step 2. 위치도 결과 분석")
 
-    # 1. 세션 데이터 확인
     if 'data' not in st.session_state or st.session_state.data is None:
-        st.warning("⚠️ Step 1에서 데이터를 먼저 변환하거나 성적서를 붙여넣어주세요.")
+        st.warning("⚠️ Step 1에서 데이터를 먼저 준비해주세요.")
         return
 
-    # 데이터 복사 및 전처리
     df_m = st.session_state.data.copy()
 
-    # 모든 계산용 컬럼을 강제로 숫자 형식으로 변환 (에러 방지 핵심)
+    # 데이터 수치화 (강제 변환)
     numeric_cols = ['기본공차', '도면치수_X', '도면치수_Y', '측정치_X', '측정치_Y', '실측지름_MMC용']
     for col in numeric_cols:
         if col in df_m.columns:
             df_m[col] = pd.to_numeric(df_m[col], errors='coerce').fillna(0.0)
 
-    # 2. 분석 설정 UI
     st.subheader("⚙️ 분석 설정")
-    col1, col2 = st.columns(2)
-    with col1:
-        mmc_val = st.number_input("📏 MMC 기준값 (최대 실체 조건 지름)", value=0.35, step=0.001, format="%.3f")
-    with col2:
-        st.write("")
-        st.caption("💡 실측지름이 기준값보다 클 경우 그 차이만큼 보너스 공차가 합산됩니다.")
+    mmc_val = st.number_input("📏 MMC 기준값 (최대 실체 조건 지름)", value=0.35, step=0.001, format="%.3f")
 
-    if st.button("🔍 위치도 분석 실행"):
+    if st.button("🔍 위치도 분석 및 시각화 실행"):
         try:
-            # --- 위치도 계산 공식 적용 ---
-            # 위치도 = √((ΔX)² + (ΔY)²) * 2
-            df_m['위치도결과'] = (
-                ((df_m['측정치_X'] - df_m['도면치수_X'])**2 + 
-                 (df_m['측정치_Y'] - df_m['도면치수_Y'])**2)**0.5 * 2
-            ).round(4)
-
-            # --- MMC 보너스 공차 계산 ---
-            # 보너스 = 실측지름 - MMC기준값 (단, 0보다 작을 수 없음)
+            # 1. 계산 로직
+            df_m['위치도결과'] = (((df_m['측정치_X'] - df_m['도면치수_X'])**2 + (df_m['측정치_Y'] - df_m['도면치수_Y'])**2)**0.5 * 2).round(4)
             df_m['보너스공차'] = (df_m['실측지름_MMC용'] - mmc_val).clip(lower=0).round(4)
             df_m['최종공차'] = (df_m['기본공차'] + df_m['보너스공차']).round(4)
-
-            # --- 합불 판정 ---
             df_m['판정'] = df_m.apply(lambda x: "✅ OK" if x['위치도결과'] <= x['최종공차'] else "❌ NG", axis=1)
 
-            # --- 결과 출력 ---
+            # 2. 결과 보고서 출력
             st.divider()
             st.subheader("📝 분석 결과 보고서")
             
-            # 출력할 컬럼 순서 정리
-            display_cols = [
-                '측정포인트', '도면치수_X', '도면치수_Y', '측정치_X', '측정치_Y', 
-                '위치도결과', '기본공차', '보너스공차', '최종공차', '판정'
-            ]
+            display_cols = ['측정포인트', '도면치수_X', '도면치수_Y', '측정치_X', '측정치_Y', '위치도결과', '최종공차', '판정']
             final_display = df_m[[c for c in display_cols if c in df_m.columns]]
             
-            # 표 색상 입히기 함수
             def highlight_pass_fail(val):
-                if 'OK' in str(val):
-                    return 'background-color: #DFF2BF; color: #270;' # 연초록
-                elif 'NG' in str(val):
-                    return 'background-color: #FFBABA; color: #D8000C;' # 연빨강
-                return ''
+                color = '#DFF2BF' if 'OK' in str(val) else '#FFBABA'
+                return f'background-color: {color}'
 
-            # Pandas 버전 호환성 처리 (map vs applymap)
             try:
-                styled_df = final_display.style.map(highlight_pass_fail, subset=['판정'])
+                st.dataframe(final_display.style.map(highlight_pass_fail, subset=['판정']), use_container_width=True)
             except AttributeError:
-                styled_df = final_display.style.applymap(highlight_pass_fail, subset=['판정'])
+                st.dataframe(final_display.style.applymap(highlight_pass_fail, subset=['판정']), use_container_width=True)
 
-            st.dataframe(styled_df, use_container_width=True)
-
-            # --- 통계 지표 ---
-            ok_count = (df_m['판정'] == "✅ OK").sum()
-            ng_count = (df_m['판정'] == "❌ NG").sum()
+            # 3. 🎨 위치도 산포도 그래프 작성
+            st.divider()
+            st.subheader("🎯 위치도 산포도 분석 (Deviation Plot)")
             
-            c1, c2, c3 = st.columns(3)
-            c1.metric("전체 샘플", f"{len(df_m)}개")
-            c2.metric("합격(OK)", f"{ok_count}개")
-            c3.metric("불합격(NG)", f"{ng_count}개", delta=str(ng_count) if ng_count > 0 else None, delta_color="inverse")
-
-            st.success("✅ 위치도 분석이 완료되었습니다.")
+            fig, ax = plt.subplots(figsize=(8, 8))
+            
+            # 편차 계산 (중심을 0,0으로 만들기 위함)
+            dev_x = df_m['측정치_X'] - df_m['도면치수_X']
+            dev_y = df_m['측정치_Y'] - df_m['도면치수_Y']
+            
+            # 최대 공차원 그리기 (시각적 가이드)
+            max_tol = df_m['최종공차'].max() / 2
+            circle = plt.Circle((0, 0), max_tol, color='red', fill=False, linestyle='--', label=f'Max Tolerance (Ø{df_m["최종공차"].max()})')
+            ax.add_patch(circle)
+            
+            # 데이터 포인트 찍기
+            colors = df_m['판정'].apply(lambda x: 'green' if 'OK' in x else 'red')
+            ax.scatter(dev_x, dev_y, c=colors, s=50, edgecolors='white', label='Measured Points')
+            
+            # 그래프 디테일 설정
+            ax.axhline(0, color='black', linewidth=1)
+            ax.axvline(0, color='black', linewidth=1)
+            ax.set_xlabel("Deviation X")
+            ax.set_ylabel("Deviation Y")
+            ax.set_title("Position Error Distribution")
+            ax.grid(True, linestyle=':', alpha=0.6)
+            ax.set_aspect('equal') # 비율을 1:1로 고정하여 원이 찌그러지지 않게 함
+            
+            # 축 범위 자동 조절 (공차원보다 살짝 크게)
+            limit = max_tol * 1.5 if max_tol > 0 else 0.5
+            ax.set_xlim(-limit, limit)
+            ax.set_ylim(-limit, limit)
+            
+            st.pyplot(fig)
+            
+            # 통계 출력
+            ok_count = (df_m['판정'] == "✅ OK").sum()
+            st.success(f"✅ 분석 완료: 전체 {len(df_m)}개 중 {ok_count}개 합격")
 
         except Exception as e:
-            st.error(f"⚠️ 분석 중 오류가 발생했습니다: {e}")
-            st.info("데이터에 숫자가 아닌 값이 섞여 있는지 확인해 주세요.")
+            st.error(f"⚠️ 그래프 생성 중 오류 발생: {e}")
             
 def run_quality_calculator():
     """메뉴 4: 품질 계산기"""
