@@ -3,10 +3,9 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from io import BytesIO
-import os
 
-# --- 1. 페이지 설정 및 디자인 (v8.3 동일 유지) ---
-st.set_page_config(page_title="품질 통합 분석 시스템 v8.4", layout="wide")
+# --- 1. 페이지 설정 및 디자인 (절대 유지) ---
+st.set_page_config(page_title="품질 통합 분석 시스템 v8.5", layout="wide")
 
 st.markdown("""
     <style>
@@ -17,16 +16,16 @@ st.markdown("""
         background-color: #ef4444 !important; color: white !important;
         font-weight: bold !important; width: 100%; border-radius: 8px;
     }
-    .stBox { background-color: #ffffff; padding: 25px; border-radius: 15px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); margin-bottom: 25px; }
-    .report-card { background-color: #f1f5f9; padding: 20px; border-left: 10px solid #3b82f6; border-radius: 8px; line-height: 2.0; font-size: 1.1em; }
+    .stBox { background-color: #ffffff; padding: 25px; border-radius: 15px; border: 1px solid #e2e8f0; margin-bottom: 25px; }
+    .report-card { background-color: #f1f5f9; padding: 20px; border-left: 10px solid #3b82f6; border-radius: 8px; line-height: 2.0; }
     .guide-box { padding: 15px; background-color: #f8fafc; border-radius: 10px; border: 1px dashed #cbd5e1; margin-bottom: 15px; }
     </style>
 """, unsafe_allow_html=True)
 
 if 'reset_key' not in st.session_state: st.session_state.reset_key = 0
 
-# --- 2. 사이드바 (v8.3 구조 유지) ---
-st.sidebar.title("💎 품질 통합 플랫폼 v8.4")
+# --- 2. 사이드바 (구조 및 위치 유지) ---
+st.sidebar.title("💎 품질 통합 플랫폼 v8.5")
 menu = st.sidebar.radio("📋 업무 선택", ["🔄 데이터 변환기", "📈 멀티 캐비티 분석", "🎯 위치도(MMC) 분석", "🧮 품질 계산기"], key=f"m_{st.session_state.reset_key}")
 
 st.sidebar.markdown("---")
@@ -34,6 +33,16 @@ if st.sidebar.button("🧹 모든 데이터 초기화"):
     for key in list(st.session_state.keys()): del st.session_state[key]
     st.session_state.reset_key += 1
     st.rerun()
+
+# --- [공용 함수: 엑셀 이미지 삽입 엔진] ---
+def safe_to_image(fig, filename="chart.png"):
+    """서버 환경에서 이미지 변환 실패 시 에러 없이 데이터만 저장하도록 방어"""
+    try:
+        # Kaleido 엔진을 사용하여 이미지 추출 시도
+        return fig.to_image(format="png", width=800, height=500)
+    except Exception:
+        # 서버에서 이미지 엔진(Chrome 등) 미지원 시 None 반환
+        return None
 
 # --- [메뉴 1] 데이터 변환기 (유지) ---
 if menu == "🔄 데이터 변환기":
@@ -50,14 +59,14 @@ if menu == "🔄 데이터 변환기":
             st.download_button("📥 결과 CSV 저장", df_res.to_csv(index=False).encode('utf-8-sig'), "converted_data.csv")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- [메뉴 2] 멀티 캐비티 분석 (이미지 삽입 보완) ---
+# --- [메뉴 2] 멀티 캐비티 분석 (에러 방어 및 이미지 삽입) ---
 elif menu == "📈 멀티 캐비티 분석":
     st.title("📊 핀 높이 멀티 캐비티 통합 분석")
     def get_cav_template():
         df_t = pd.DataFrame({"Point": range(1,6), "SPEC_MIN": [30.1]*5, "SPEC_MAX": [30.5]*5, "Cavity_1": [30.2]*5, "Cavity_2": [30.3]*5, "Cavity_3": [30.2]*5, "Cavity_4": [30.4]*5})
         out = BytesIO(); writer = pd.ExcelWriter(out, engine='xlsxwriter'); df_t.to_excel(writer, index=False); writer.close()
         return out.getvalue()
-    st.download_button("📄 분석용 템플릿 다운로드", get_cav_template(), "Multi_Cavity_Template.xlsx")
+    st.download_button("📄 템플릿 다운로드", get_cav_template(), "Multi_Cavity_Template.xlsx")
     
     up = st.file_uploader("파일 업로드", type=["xlsx", "csv"])
     if up:
@@ -96,22 +105,22 @@ elif menu == "📈 멀티 캐비티 분석":
         
         st.markdown(f'<div class="report-card">{"<br>".join(summary_items)}</div>', unsafe_allow_html=True)
         
-        # [이미지 삽입 엑셀 다운로드 로직]
+        # [다운로드 엔진 수정]
         out_cav = BytesIO()
         with pd.ExcelWriter(out_cav, engine='xlsxwriter') as writer:
             df.to_excel(writer, sheet_name='Data_Result', index=False)
             workbook = writer.book
             worksheet = workbook.add_worksheet('Visual_Chart')
-            # 안내 문구 삽입
-            worksheet.write('A1', '※ 통합 트렌드 그래프는 시스템에서 자동 생성되어 삽입되었습니다.')
-            img_data = fig_total.to_image(format="png", width=800, height=500)
-            img_io = BytesIO(img_data)
-            worksheet.insert_image('A3', 'trend_chart.png', {'image_data': img_io})
-            
-        st.download_button("📥 그래프 포함 분석결과 엑셀 저장", out_cav.getvalue(), "Cavity_Report_Full.xlsx", use_container_width=True)
+            img_data = safe_to_image(fig_total)
+            if img_data:
+                worksheet.insert_image('A1', 'trend.png', {'image_data': BytesIO(img_data)})
+            else:
+                worksheet.write('A1', '※ 서버 환경상 이미지는 별도 저장 아이콘을 이용해주세요.')
+                
+        st.download_button("📥 분석결과 엑셀 저장", out_cav.getvalue(), "Cavity_Analysis.xlsx", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- [메뉴 3] 위치도 분석 (이미지 삽입 보완) ---
+# --- [메뉴 3] 위치도 분석 (에러 방어 및 가이드) ---
 elif menu == "🎯 위치도(MMC) 분석":
     st.title("🎯 위치도 정밀 분석 (MMC)")
     def get_pos_template():
@@ -131,7 +140,7 @@ elif menu == "🎯 위치도(MMC) 분석":
         df_m['판정'] = np.where(df_m['위치도결과'] <= df_m['최종공차'], "OK", "NG")
 
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        st.markdown("""<div class="guide-box">🔵 파란 점선: 중심 정밀(±0.05) | 🟣 보라 실선: 최종 합격 범위 | 🔴 빨간 점선: 공차 한계선</div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="guide-box">🔵 파랑: 정밀관리(±0.05) | 🟣 보라: 합격공차 | 🔴 빨강: 공차한계</div>""", unsafe_allow_html=True)
         
         fig_pos = go.Figure()
         fig_pos.update_yaxes(scaleanchor="x", scaleratio=1, zeroline=True, zerolinecolor='black')
@@ -145,41 +154,37 @@ elif menu == "🎯 위치도(MMC) 분석":
             fig_pos.add_trace(go.Scatter(x=[r['X편차']], y=[r['Y편차']], mode='markers+text', text=[f"<b>{int(r['측정포인트'])}</b>"], textposition="top center", marker=dict(size=12, color=p_c, line=dict(width=1, color='white'))))
         st.plotly_chart(fig_pos, use_container_width=True)
         
-        st.subheader("📋 실측 데이터 확인")
-        st.dataframe(df_m.style.map(lambda x: 'background-color: #d1fae5' if x == 'OK' else 'background-color: #fee2e2', subset=['판정']), use_container_width=True)
+        st.subheader("📋 데이터 확인")
+        st.dataframe(df_m, use_container_width=True)
         
-        # [이미지 삽입 엑셀 다운로드 로직]
         out_pos = BytesIO()
         with pd.ExcelWriter(out_pos, engine='xlsxwriter') as writer:
-            df_m.to_excel(writer, sheet_name='Position_Data', index=False)
+            df_m.to_excel(writer, sheet_name='Data', index=False)
             workbook = writer.book
-            worksheet = workbook.add_worksheet('Position_Chart')
-            worksheet.write('A1', '※ 위치도 분석 과녁 그래프가 삽입되었습니다.')
-            # Plotly 서식을 유지하여 이미지 변환
-            img_data = fig_pos.to_image(format="png", width=700, height=700)
-            img_io = BytesIO(img_data)
-            worksheet.insert_image('A3', 'pos_chart.png', {'image_data': img_io})
+            worksheet = workbook.add_worksheet('Chart')
+            img_data = safe_to_image(fig_pos)
+            if img_data:
+                worksheet.insert_image('A1', 'pos.png', {'image_data': BytesIO(img_data)})
+            else:
+                worksheet.write('A1', '※ 그래프 저장은 우측 상단 카메라 아이콘을 활용해주세요.')
 
-        st.download_button("📥 그래프 포함 분석결과 엑셀 저장", out_pos.getvalue(), "Position_Report_Full.xlsx", use_container_width=True)
+        st.download_button("📥 위치도 결과 엑셀 저장", out_pos.getvalue(), "Position_Analysis.xlsx", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # --- [메뉴 4] 품질 계산기 (유지) ---
 elif menu == "🧮 품질 계산기":
     st.title("🧮 품질 종합 계산기")
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    tabs = st.tabs(["🎯 MMC 보너스", "🔧 일반 단위환산", "⚙️ 토크 변환", "⚖️ 합격 판정"])
+    tabs = st.tabs(["🎯 MMC 보너스", "🔧 단위환산", "⚙️ 토크 변환", "⚖️ 합격 판정"])
     with tabs[0]:
-        base_g = st.number_input("기본 기하공차", value=0.05); mmc_s = st.number_input("MMC 규격", value=10.00); act_s = st.number_input("현재 실측", value=10.02)
+        base_g = st.number_input("기본 기하공차", value=0.05); mmc_s = st.number_input("MMC 규격", value=10.00); act_s = st.number_input("실측", value=10.02)
         st.metric("최종 공차", f"{base_g + max(0, act_s - mmc_s):.4f}")
     with tabs[1]:
         v = st.number_input("값", value=1.0); m = st.selectbox("종류", ["mm ➔ inch", "inch ➔ mm"])
         st.success(f"결과: {v/25.4:.4f}" if "inch" in m[:4] else f"결과: {v*25.4:.4f}")
     with tabs[2]:
-        t_v = st.number_input("토크 값 입력", value=1.0); t_m = st.selectbox("단위", ["N·m ➔ kgf·m", "kgf·m ➔ N·m", "N·m ➔ kgf·cm", "kgf·cm ➔ N·m"])
-        if t_m == "N·m ➔ kgf·m": res = t_v * 0.10197
-        elif t_m == "kgf·m ➔ N·m": res = t_v * 9.80665
-        elif t_m == "N·m ➔ kgf·cm": res = t_v * 10.197
-        else: res = t_v * 0.09806
+        t_v = st.number_input("토크 값", value=1.0); t_m = st.selectbox("단위", ["N·m ➔ kgf·m", "kgf·m ➔ N·m", "N·m ➔ kgf·cm", "kgf·cm ➔ N·m"])
+        res = t_v * 0.10197 if "N·m ➔ kgf·m" in t_m else t_v * 9.80665 if "kgf·m" in t_m else t_v * 10.197 if "N·m ➔ kgf·cm" in t_m else t_v * 0.09806
         st.info(f"변환 결과: {res:.4f}")
     with tabs[3]:
         spec = st.number_input("기준"); u, l = st.number_input("상한"), st.number_input("하한"); m_v = st.number_input("측정")
