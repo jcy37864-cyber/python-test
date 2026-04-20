@@ -349,8 +349,8 @@ def run_position_analysis():
             # 범례 표시
             ax.legend(loc='upper right', frameon=True, shadow=True)
             
-            # 축 범위 자동 설정 (공차 영역보다 20% 여유 있게)
-            limit = max_radius * 1.2
+            # 축 범위 자동 설정 (공차원의 110% 수준으로만 확대)
+            limit = max_radius * 1.1
             ax.set_xlim(-limit, limit)
             ax.set_ylim(-limit, limit)
             
