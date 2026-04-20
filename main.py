@@ -188,33 +188,69 @@ elif menu == "📈 그래프 분석":
 elif menu == "🧮 계산기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("🧮 품질 보조 계산기")
-    tabs = st.tabs(["🔧 토크 변환", "📊 합계/평균", "📏 공차 판정"])
     
+    # 탭 구성 (기초 단위 변환 추가)
+    tabs = st.tabs(["🔧 토크 변환", "📏 기초 단위 변환", "📊 합계/평균", "⚖️ 공차 판정"])
+    
+    # 1. 토크 변환 탭
     with tabs[0]:
         st.write("### 토크 단위 상호 변환")
         col_t1, col_t2 = st.columns(2)
-        val = col_t1.number_input("입력 수치", value=0.0, format="%.4f", key="torque_input")
-        mode = col_t2.selectbox("변환 방향", ["N·m → kgf·m", "kgf·m → N·m"])
-        res = val * 0.101972 if "kgf" in mode else val * 9.80665
-        st.success(f"**결과: {res:.4f}**")
+        val_t = col_t1.number_input("토크 수치 입력", value=0.0, format="%.4f", key="torque_input")
+        mode_t = col_t2.selectbox("변환 방향", ["N·m → kgf·m", "kgf·m → N·m"], key="torque_mode")
+        
+        # N·m <-> kgf·m 변환 로직
+        res_t = val_t * 0.101972 if "kgf" in mode_t else val_t * 9.80665
+        st.success(f"**변환 결과: {res_t:.4f} {'kgf·m' if 'kgf' in mode_t else 'N·m'}**")
 
+    # 2. 기초 단위 변환 탭 (새로 추가)
     with tabs[1]:
+        st.write("### 실무 기초 단위 변환")
+        c_u1, c_u2, c_u3 = st.columns([2, 2, 1])
+        
+        unit_type = c_u1.selectbox("측정 항목", ["길이 (mm/inch)", "무게 (kg/lb)", "압력 (MPa/psi/bar)"])
+        val_u = c_u2.number_input("수치 입력", value=0.0, format="%.4f", key="unit_val")
+        
+        if "길이" in unit_type:
+            u_mode = c_u3.selectbox("방향", ["mm → inch", "inch → mm"])
+            res_u = val_u / 25.4 if "inch" in u_mode else val_u * 25.4
+            unit_label = "inch" if "inch" in u_mode else "mm"
+            
+        elif "무게" in unit_type:
+            u_mode = c_u3.selectbox("방향", ["kg → lb", "lb → kg"])
+            res_u = val_u * 2.20462 if "lb" in u_mode else val_u / 2.20462
+            unit_label = "lb" if "lb" in u_mode else "kg"
+            
+        elif "압력" in unit_type:
+            u_mode = c_u3.selectbox("방향", ["MPa → psi", "psi → MPa", "MPa → bar", "bar → MPa"])
+            if u_mode == "MPa → psi": res_u = val_u * 145.038
+            elif u_mode == "psi → MPa": res_u = val_u / 145.038
+            elif u_mode == "MPa → bar": res_u = val_u * 10
+            elif u_mode == "bar → MPa": res_u = val_u / 10
+            unit_label = u_mode.split("→")[1].strip()
+
+        st.info(f"**변환 결과: {res_u:.4f} {unit_label}**")
+
+    # 3. 합계/평균 탭
+    with tabs[2]:
         st.write("### 데이터 합계 및 평균")
-        txt = st.text_area("숫자들을 쉼표(,)로 구분하여 입력", "10.5, 20.1234, 15.7")
+        txt = st.text_area("숫자들을 쉼표(,)로 구분하여 입력", "10.5, 20.1234, 15.7", key="stat_input")
         try:
             v_list = [float(x.strip()) for x in txt.split(",") if x.strip()]
             if v_list:
                 st.info(f"합계: **{sum(v_list):.4f}** |  평균: **{sum(v_list)/len(v_list):.4f}** |  샘플수: {len(v_list)}")
         except: st.error("올바른 숫자 형식을 입력하세요.")
 
-    with tabs[2]:
+    # 4. 공차 판정 탭
+    with tabs[3]:
         st.write("### 상하한 분리 공차 판정")
         cc1, cc2, cc3, cc4 = st.columns(4)
-        tar = cc1.number_input("기준값", 0.0, format="%.4f")
-        ut = cc2.number_input("상한(+)", 0.0, format="%.4f")
-        lt = cc3.number_input("하한(-)", 0.0, format="%.4f")
-        ms = cc4.number_input("측정값", 0.0, format="%.4f")
+        tar = cc1.number_input("기준값", 0.0, format="%.4f", key="tol_tar")
+        ut = cc2.number_input("상한(+)", 0.0, format="%.4f", key="tol_ut")
+        lt = cc3.number_input("하한(-)", 0.0, format="%.4f", key="tol_lt")
+        ms = cc4.number_input("측정값", 0.0, format="%.4f", key="tol_ms")
         mi, ma = tar - abs(lt), tar + abs(ut)
         if mi <= ms <= ma: st.success(f"**✅ OK** (규격: {mi:.4f} ~ {ma:.4f})")
         else: st.error(f"**🚨 NG** (이탈량: {ms-ma if ms>ma else ms-mi:.4f})")
+        
     st.markdown('</div>', unsafe_allow_html=True)
