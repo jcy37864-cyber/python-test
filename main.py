@@ -47,13 +47,13 @@ def clean_float(value):
 
 def run_data_converter():
     st.header("🔄 성적서 데이터 자동 변환기")
-    st.info("💡 **도면치수(Nominal)** 열부터 CAVITY 데이터 끝(**4.nmp**)까지 통째로 복사해서 붙여넣으세요.")
+    st.info("💡 **도면치수(Nominal)** 열부터 데이터 끝(**4.nmp, 6.nmp 등**)까지 복사해서 붙여넣으세요.")
 
-    # 데이터 입력창
+    # 데이터 입력창 (가이드 문구 포함)
     raw_data = st.text_area(
         "성적서 데이터를 붙여넣으세요", 
         height=300, 
-        placeholder="[복사 가이드]\n1. 성적서의 'Nominal' 열부터 '4.nmp' 열까지 영역을 드래그합니다.\n2. PIN2, PIN3 등 모든 행이 포함되게 복사(Ctrl+C)합니다.\n3. 이곳에 붙여넣기(Ctrl+V) 하세요."
+        placeholder="Nominal 열부터 끝까지 드래그하여 복사한 내용을 여기에 붙여넣으세요.\n캐비티 개수는 자동으로 감지됩니다."
     )
 
     if st.button("🚀 분석 데이터로 변환"):
@@ -61,14 +61,12 @@ def run_data_converter():
             try:
                 # 1. 텍스트 데이터를 행 단위로 나누기
                 lines = [line.split('\t') for line in raw_data.strip().split('\n')]
-                
-                # 만약 탭으로 안 나눠지면 공백으로 시도
                 if len(lines[0]) <= 1:
                     lines = [re.split(r'\s{2,}', line.strip()) for line in raw_data.strip().split('\n')]
 
                 processed_results = []
                 
-               # run_data_converter 내부 루프 수정
+                # 2. 4줄씩 한 세트 처리
                 for i in range(0, len(lines), 4):
                     if i + 3 >= len(lines): break 
                     
@@ -77,25 +75,26 @@ def run_data_converter():
                         x_line = lines[i+2]
                         y_line = lines[i+3]
                         
-                        # 1. 도면치수 추출
+                        # 도면치수 추출 (줄의 맨 앞 숫자)
                         nom_x = clean_float(x_line[0]) if len(x_line) > 0 else 0.0
                         nom_y = clean_float(y_line[0]) if len(y_line) > 0 else 0.0
 
-                        # 2. 캐비티(샘플) 개수 자동 계산
-                        # 줄의 뒷부분에서 실제로 측정값이 들어있는 칸들만 필터링합니다.
-                        # 보통 .nmp 문구가 포함된 열의 개수를 세거나, 뒤에서부터 숫자인 것만 셉니다.
-                        actual_data_x = [v for v in x_line if re.search(r'\d', str(v))][1:] # 첫번째(Nominal) 제외
-                        sample_count = len(actual_data_x) 
-                        
+                        # 캐비티(샘플) 개수 자동 계산 로직
+                        # x_line에서 숫자가 포함된 요소 중 도면치수(첫번째)를 제외한 나머지 개수 확인
+                        numeric_values = [v for v in x_line if re.search(r'\d', str(v))]
+                        sample_count = len(numeric_values) - 1 # 첫 번째(Nominal) 제외
+
                         for s in range(sample_count):
-                            # 뒤에서부터 sample_count만큼 가져오기
+                            # 뒤에서부터 샘플 개수만큼 데이터 추출
                             idx = -(sample_count - s) 
                             
                             act_x = clean_float(x_line[idx])
                             act_y = clean_float(y_line[idx])
+                            # MMC 지름 라인(i+1)에서도 동일한 위치의 데이터 추출
                             act_dia = clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
                             
-                            pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), "Unknown")
+                            # PIN 이름 찾기
+                            pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), f"POINT_{i//4 + 1}")
 
                             processed_results.append({
                                 "측정포인트": f"{pin_name}_S{s+1}",
@@ -105,20 +104,18 @@ def run_data_converter():
                                 "측정치_X": act_x,
                                 "측정치_Y": act_y,
                                 "실측지름_MMC용": act_dia
-                            })                    except Exception as inner_e:
-                        continue
+                            })
+                    except Exception as inner_e:
+                        continue # 한 블록 에러나도 다음으로 진행
 
-                # --- 결과 출력 및 안내 (이 부분이 질문하신 핵심 내용) ---
+                # 3. 결과 출력
                 if processed_results:
                     df_result = pd.DataFrame(processed_results)
-                    st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다!")
+                    st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다! (캐비티 수: {sample_count}개)")
                     st.dataframe(df_result)
                     
-                    # 분석 세션에 자동 저장
                     st.session_state.data = df_result
                     st.balloons()
-                    
-                    # ✅ 정확하게 수정된 안내 문구
                     st.info("🎯 변환 완료! 이제 상단의 **'📊 Step 2. 위치도 결과 분석'** 탭을 클릭하세요.")
                 else:
                     st.error("데이터를 분석할 수 없습니다. 형식을 확인해주세요.")
