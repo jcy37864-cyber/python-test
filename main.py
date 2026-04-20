@@ -75,9 +75,17 @@ def run_data_converter():
                         
                         pin_name = pin_line[0].strip()
                         
+                        # 도면치수 추출 로직 강화
+                        # x_line에서 숫자가 들어있는 첫 번째 혹은 두 번째 요소를 탐색
                         try:
-                            nom_x = clean_float(x_line[0])
-                            nom_y = clean_float(y_line[0])
+                            # 만약 Nominal까지 긁었다면 0번 인덱스에 있을 것이고, 
+                            # Ref부터 긁었다면 0번은 'X'라는 글자일 확률이 높음
+                            val_x = [clean_float(v) for v in x_line if re.search(r'\d', str(v))]
+                            val_y = [clean_float(v) for v in y_line if re.search(r'\d', str(v))]
+                            
+                            # 줄에서 가장 앞쪽에 있는 숫자를 도면치수로 간주 (수정 포인트)
+                            nom_x = val_x[0] if val_x else 0.0
+                            nom_y = val_y[0] if val_y else 0.0
                         except:
                             nom_x, nom_y = 0.0, 0.0
 
