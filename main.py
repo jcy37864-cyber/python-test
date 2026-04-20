@@ -6,14 +6,33 @@ import numpy as np
 from io import BytesIO
 
 # 1. 페이지 설정
-st.set_page_config(page_title="품질 측정 통합 시스템 v4.0", layout="wide")
+st.set_page_config(page_title="품질 측정 통합 시스템 v4.1", layout="wide")
 
-# 2. 커스텀 CSS
+# 2. 커스텀 CSS (버튼 가시성 보강 및 UI 디자인)
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     [data-testid="stSidebar"] { background-color: #0E1117 !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    
+    /* 사이드바 내의 모든 버튼 글자색 강제 지정 */
+    [data-testid="stSidebar"] button p {
+        color: #FFFFFF !important;
+        font-weight: bold;
+    }
+    
+    /* 초기화 버튼 전용 스타일 (빨간색 계열로 강조) */
+    div.stButton > button {
+        border-radius: 8px;
+    }
+    
+    /* 사이드바 리셋 버튼 전용 스타일 */
+    [data-testid="stSidebar"] div.stButton > button {
+        background-color: #FF4B4B !important;
+        color: white !important;
+        border: none !important;
+    }
+
     .stBox {
         background-color: #ffffff;
         padding: 25px;
@@ -54,14 +73,15 @@ elif menu == "📈 그래프 분석":
 elif menu == "🧮 계산기":
     st.sidebar.info("**🧮 품질 계산기**\n\nMMC 보너스 공차 계산, 정밀 공차 판정, 단위 변환 등 실무 수식을 제공합니다.")
 
-# [추가 아이디어 1] 전체 데이터 초기화 버튼
-if st.sidebar.button("🧹 데이터 초기화 (Reset)"):
+st.sidebar.markdown("---")
+# [개선] 글자가 항상 잘 보이는 초기화 버튼
+if st.sidebar.button("🧹 데이터 초기화 (Reset)", use_container_width=True):
     for key in st.session_state.keys():
         del st.session_state[key]
     st.rerun()
 
 # =========================
-# 🔄 1. ZXY 변환 (복사 기능 보강)
+# 🔄 1. ZXY 변환
 # =========================
 if menu == "🔄 ZXY 변환":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
@@ -82,16 +102,15 @@ if menu == "🔄 ZXY 변환":
             result_df.index = result_df.index + 1
             st.dataframe(result_df, use_container_width=True, height=400)
             
-            # [추가 아이디어 3] 간편 복사용 텍스트 영역
             st.markdown("### 📋 간편 복사 영역")
             copy_text = "\n".join(map(str, results))
-            st.text_area("마우스로 드래그하여 복사하세요", copy_text, height=150)
+            st.text_area("드래그하여 전체 복사가 가능합니다.", copy_text, height=150)
             
             st.download_button("📂 CSV 다운로드", result_df.to_csv(index=True).encode("utf-8-sig"), "zxy_result.csv")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# 📈 2. 그래프 분석 (히스토그램 보강)
+# 📈 2. 그래프 분석
 # =========================
 elif menu == "📈 그래프 분석":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
@@ -115,9 +134,7 @@ elif menu == "📈 그래프 분석":
         ng_df = df[df["판정"] == "NG"]
         avg_v, std_v = df['VALUE'].mean(), df['VALUE'].std()
 
-        # [그래프 영역]
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        # 1. 추세 점 그래프
         st.subheader("📈 측정 추세 분석 (Line)")
         fig_p = go.Figure()
         fig_p.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='측정값'))
@@ -129,7 +146,6 @@ elif menu == "📈 그래프 분석":
             fig_p.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', marker=dict(color='rgba(0,0,0,0)', size=20, line=dict(color='red', width=3))))
         st.plotly_chart(fig_p, use_container_width=True)
 
-        # 2. 정밀 막대 그래프
         st.subheader("📊 샘플별 수치 비교 (Bar - 정밀 보기)")
         y_min, y_max = min(df["VALUE"].min(), df["MIN"].min()) * 0.999, max(df["VALUE"].max(), df["MAX"].max()) * 1.001
         colors = ['#FF4B4B' if p == "NG" else '#00B4D8' for p in df["판정"]]
@@ -140,7 +156,6 @@ elif menu == "📈 그래프 분석":
         fig_b.update_layout(yaxis_range=[y_min, y_max], yaxis=dict(tickformat=".3f"), showlegend=False)
         st.plotly_chart(fig_b, use_container_width=True)
 
-        # [추가 아이디어 2] 데이터 분포 히스토그램
         st.subheader("🎯 데이터 분포 분석 (Histogram)")
         fig_h = go.Figure()
         fig_h.add_trace(go.Histogram(x=df["VALUE"], nbinsx=15, marker_color='#1f77b4', opacity=0.7))
@@ -150,11 +165,10 @@ elif menu == "📈 그래프 분석":
         st.plotly_chart(fig_h, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # [저장 및 리포트 섹션]
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
         st.subheader("💾 데이터 저장 및 정밀 분석")
         
-        # 엑셀용 이미지 생성 (Matplotlib)
+        # 엑셀용 이미지 생성
         fig_mpl1, ax1 = plt.subplots(figsize=(10, 4))
         ax1.plot(df.index, df["VALUE"], marker='o', color='#1f77b4', alpha=0.7)
         ax1.axhline(y=df["MAX"].iloc[0], color='green', linestyle='--')
@@ -182,7 +196,7 @@ elif menu == "📈 그래프 분석":
                     worksheet.set_row(i + 1, None, fmt)
                 worksheet.insert_image('H2', 'line.png', {'image_data': img_line, 'x_scale': 0.5, 'y_scale': 0.5})
                 worksheet.insert_image('H22', 'bar.png', {'image_data': img_bar, 'x_scale': 0.5, 'y_scale': 0.5})
-            st.download_button("📂 결과 엑셀 다운로드 (그래프 2종 포함)", excel_buf.getvalue(), "Quality_Report_v4.xlsx", use_container_width=True)
+            st.download_button("📂 결과 엑셀 다운로드", excel_buf.getvalue(), "Quality_Report_v4_1.xlsx", use_container_width=True)
         with cd2:
             st.download_button("🖼️ 메인 그래프 이미지 다운로드", img_line.getvalue(), "Trend_Graph.png", use_container_width=True)
         
@@ -192,53 +206,52 @@ elif menu == "📈 그래프 분석":
             st.info("📊 **데이터 상세 요약**")
             total_n, ng_n = len(df), len(ng_df)
             m1, m2 = st.columns(2); m1.metric("총 샘플", f"{total_n}개"); m2.metric("불량률", f"{(ng_n/total_n)*100:.1f}%", f"-{ng_n} NG", delta_color="inverse")
-            if ng_n == 0: msg = f"✅ **공정 안정:** 모든 샘플이 규격 내에 있습니다. 평균 {avg_v:.4f}, 산포 {std_v:.4f}로 매우 우수합니다."
-            else: msg = f"🚨 **품질 주의:** {ng_n}개의 불량 발생. **No.{worst_idx}({worst_val:.4f})** 점검이 필요합니다."
+            if ng_n == 0: msg = f"✅ **공정 안정:** 모든 샘플 규격 내 존재. 평균 {avg_v:.4f}, 산포 {std_v:.4f}로 우수합니다."
+            else: msg = f"🚨 **품질 주의:** {ng_n}개 불량 발생. **No.{worst_idx}({worst_val:.4f})** 점검이 필요합니다."
             st.markdown(f'<div class="summary-box">{msg}</div>', unsafe_allow_html=True)
         with c2: st.metric("평균 (Mean)", f"{avg_v:.4f}", f"σ: {std_v:.4f}")
         with c3: st.metric("Worst Point", f"{worst_val:.4f}" if ng_n > 0 else "N/A", f"Idx: {worst_idx}")
         st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# 🧮 3. 계산기 (MMC 포함 최종)
+# 🧮 3. 계산기
 # =========================
 elif menu == "🧮 계산기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("🧮 품질 보조 및 MMC 계산기")
     tabs = st.tabs(["🎯 MMC 보너스", "⚖️ 공차 판정", "🔧 토크 변환", "📏 단위 변환", "📊 데이터 산포"])
     
-    with tabs[0]: # MMC
+    with tabs[0]:
         mc1, mc2 = st.columns(2)
-        m_type = mc1.radio("종류", ["구멍 (Hole)", "축 (Shaft)"], horizontal=True, key="m_t_v4")
-        m_geo = mc2.number_input("도면 기하공차", value=0.05, format="%.4f", key="m_g_v4")
+        m_type = mc1.radio("종류", ["구멍 (Hole)", "축 (Shaft)"], horizontal=True, key="m_t_v41")
+        m_geo = mc2.number_input("도면 기하공차", value=0.05, format="%.4f", key="m_g_v41")
         mc3, mc4, mc5 = st.columns(3)
-        m_mmc = mc3.number_input("MMC 규격치", value=10.00, format="%.4f", key="m_m_v4")
-        m_act = mc4.number_input("실측치", value=10.02 if "구멍" in m_type else 9.98, format="%.4f", key="m_a_v4")
+        m_mmc = mc3.number_input("MMC 규격치", value=10.00, format="%.4f", key="m_m_v41")
+        m_act = mc4.number_input("실측치", value=10.02 if "구멍" in m_type else 9.98, format="%.4f", key="m_a_v41")
         bonus = max(0.0, m_act - m_mmc if "구멍" in m_type else m_mmc - m_act)
         mc5.metric("최종 허용치", f"{m_geo + bonus:.4f}", f"+{bonus:.4f}")
-        st.info("실제 치수가 MMC에서 벗어난 만큼 기하 공차가 보너스로 부여됩니다.")
 
-    with tabs[1]: # 공차
+    with tabs[1]:
         p1, p2, p3, p4 = st.columns(4)
-        base, u_t, l_t, ms = p1.number_input("기준", key="cb_v4"), p2.number_input("상한", key="cu_v4"), p3.number_input("하한", key="cl_v4"), p4.number_input("측정", key="cm_v4")
+        base, u_t, l_t, ms = p1.number_input("기준", key="cb_v41"), p2.number_input("상한", key="cu_v41"), p3.number_input("하한", key="cl_v41"), p4.number_input("측정", key="cm_v41")
         lo, up = base - abs(l_t), base + abs(u_t)
         if lo <= ms <= up: st.success(f"✅ OK ({lo:.4f} ~ {up:.4f})")
         else: st.error(f"🚨 NG (이탈: {ms-up if ms>up else ms-lo:+.4f})")
 
-    with tabs[2]: # 토크
-        v, m = st.number_input("수치", key="tv_v4"), st.selectbox("방향", ["N·m → kgf·m", "kgf·m → N·m"], key="tm_v4")
+    with tabs[2]:
+        v, m = st.number_input("수치", key="tv_v41"), st.selectbox("방향", ["N·m → kgf·m", "kgf·m → N·m"], key="tm_v41")
         st.success(f"결과: {v * 0.101972 if 'kgf' in m else v * 9.80665:.4f}")
 
-    with tabs[3]: # 단위
-        u_i = st.selectbox("항목", ["mm/inch", "mm/μm", "kg/lb"], key="ui_v4")
-        u_v = st.number_input("수치", key="uv_v4")
+    with tabs[3]:
+        u_i = st.selectbox("항목", ["mm/inch", "mm/μm", "kg/lb"], key="ui_v41")
+        u_v = st.number_input("수치", key="uv_v41")
         if "inch" in u_i: res, lab = u_v/25.4, "inch"
         elif "μm" in u_i: res, lab = u_v*1000, "μm"
         else: res, lab = u_v*2.20462, "lb"
         st.info(f"결과: {res:.4f} {lab}")
 
-    with tabs[4]: # 산포
-        s_t = st.text_area("쉼표 구분 입력", key="st_v4")
+    with tabs[4]:
+        s_t = st.text_area("쉼표 구분 입력", key="st_v41")
         try:
             l = [float(x.strip()) for x in s_t.split(",") if x.strip()]
             if l: st.write(f"평균: {sum(l)/len(l):.4f} | R: {max(l)-min(l):.4f}")
