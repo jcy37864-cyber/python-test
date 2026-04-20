@@ -6,7 +6,7 @@ from io import BytesIO
 # 1. 페이지 설정
 st.set_page_config(page_title="품질 측정 통합 프로그램", layout="wide")
 
-# 2. 그래프 폰트 설정 (영문 폰트 기본 사용, 마이너스 깨짐 방지)
+# 2. 그래프 폰트 설정 (영문 기본, 마이너스 깨짐 방지)
 plt.rcParams['axes.unicode_minus'] = False
 plt.rc('font', family='sans-serif') 
 
@@ -61,7 +61,7 @@ if menu == "🔄 ZXY 변환":
             st.warning("데이터를 입력해주세요.")
 
 # =========================
-# 📈 그래프 분석 (엑셀 이미지 삽입 및 서식 추가)
+# 📈 그래프 분석 (요약부 복구 및 상세화)
 # =========================
 elif menu == "📈 그래프 분석":
     st.subheader("📈 품질 그래프 분석")
@@ -80,7 +80,7 @@ elif menu == "📈 그래프 분석":
         df["판정"] = df.apply(lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG", axis=1)
         df["편차"] = df.apply(lambda x: max(x["VALUE"] - x["MAX"], x["MIN"] - x["VALUE"], 0), axis=1)
 
-        # 화면 표시용 NG 강조
+        # 화면 표시용 NG 강조 테이블
         def highlight_ng(row):
             return ['background-color: #ffcccc' if row["판정"] == "NG" else '' for _ in row]
         st.dataframe(df.style.apply(highlight_ng, axis=1), use_container_width=True)
@@ -91,6 +91,7 @@ elif menu == "📈 그래프 분석":
         ax.axhline(y=df["MAX"].iloc[0], color='green', linestyle='--', alpha=0.6, label="MAX")
         ax.axhline(y=df["MIN"].iloc[0], color='orange', linestyle='--', alpha=0.6, label="MIN")
 
+        # NG 및 Worst 강조
         worst_idx = df["편차"].idxmax()
         worst_row = df.loc[worst_idx]
         ng_points = df[df["판정"] == "NG"]
@@ -99,9 +100,10 @@ elif menu == "📈 그래프 분석":
         if worst_row["편차"] > 0:
             ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', s=450, linewidths=2.5, zorder=5)
 
+        # 수치 레이블 표시
         ax.text(len(df)-1, df["MAX"].iloc[-1], f"MAX: {df['MAX'].iloc[-1]:.3f}", color='green', ha='right', fontweight='bold')
         ax.text(len(df)-1, df["MIN"].iloc[-1], f"MIN: {df['MIN'].iloc[-1]:.3f}", color='orange', ha='right', fontweight='bold')
-        ax.set_title("Quality Trend Analysis")
+        ax.set_title("Quality Trend Analysis (Worst Point Highlighted)")
         ax.legend(loc='lower left')
         ax.grid(True, linestyle=':', alpha=0.4)
         
@@ -111,43 +113,60 @@ elif menu == "📈 그래프 분석":
         img_buffer = BytesIO()
         fig.savefig(img_buffer, format='png', bbox_inches='tight')
 
-        # 📄 [수정] 결과 엑셀 저장 (이미지 포함 + NG 색상 적용)
+        # 📄 결과 엑셀 저장 (이미지 + 서식)
         excel_out = BytesIO()
         with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Result')
-            
             workbook  = writer.book
             worksheet = writer.sheets['Result']
-            
-            # NG 행 빨간색 포맷 정의
             red_format = workbook.add_format({'bg_color': '#FFCCCC', 'font_color': '#9C0006'})
-            
-            # 데이터 범위에 조건부 서식 적용 ($D:$D는 판정 열 위치에 따라 조정 필요, 여기서는 4번째 열인 '판정' 기준)
-            # 데이터 행(1번행부터 마지막행까지)을 순회하며 NG인 경우 색상 적용
             for row_num in range(1, len(df) + 1):
-                judgment = df.iloc[row_num-1]["판정"]
-                if judgment == "NG":
+                if df.iloc[row_num-1]["판정"] == "NG":
                     worksheet.set_row(row_num, None, red_format)
-
-            # 그래프 이미지 삽입 (데이터 옆 G2 위치쯤에 삽입)
             worksheet.insert_image('H2', 'graph.png', {'image_data': img_buffer, 'x_scale': 0.6, 'y_scale': 0.6})
 
-        st.download_button("📄 결과 엑셀 다운로드 (이미지 포함)", excel_out.getvalue(), "quality_report.xlsx")
+        st.download_button("📸 결과 엑셀 다운로드 (이미지 포함)", excel_out.getvalue(), "quality_report.xlsx")
 
+        # 🔥 [복구 및 개선] 검사 결과 요약 섹션
         st.markdown("---")
         col1, col2 = st.columns(2)
+
         with col1:
             st.markdown("### 📋 검사 결과 요약")
-            total, ng = len(df), len(df[df["판정"] == "NG"])
-            st.write(f"• 전체 샘플: {total}개 / **불량: {ng}개**")
-            if ng == 0: st.success("✅ 판정: 모든 데이터 규격 만족")
-            else: st.error(f"🚨 판정: 규격 이탈 발생")
-        with col2:
-            st.markdown("### 📍 Worst Point")
-            if worst_row["편차"] > 0:
-                st.error(f"**최대 편차: {worst_row['VALUE']:.4f}** (Index: {worst_idx})")
+            total = len(df)
+            ng_count = len(df[df["판정"] == "NG"])
+            ok_count = total - ng_count
+            
+            st.write(f"• **전체 샘플:** {total}개")
+            st.write(f"• **양호(OK):** {ok_count}개")
+            st.write(f"• **불량(NG):** {ng_count}개")
+            
+            if ng_count == 0:
+                st.success("✅ **최종 판정: 모든 데이터 규격 만족**")
             else:
-                st.info("Worst 포인트 없음 (전체 양호)")
+                st.error(f"🚨 **최종 판정: 규격 이탈 발생 (총 {ng_count}건)**")
+
+            # 평균 기반 경향 분석 (기존 내용 복구)
+            avg_val = df["VALUE"].mean()
+            mean_max = df["MAX"].mean()
+            mean_min = df["MIN"].mean()
+            
+            if avg_val > mean_max:
+                st.error(f"📉 **경향 분석:** 전체 평균({avg_val:.4f})이 상한값을 초과하는 추세입니다.")
+            elif avg_val < mean_min:
+                st.error(f"📈 **경향 분석:** 전체 평균({avg_val:.4f})이 하한값에 미달하는 추세입니다.")
+            else:
+                st.info(f"✔ **경향 분석:** 평균({avg_val:.4f})이 규격 내에서 안정적으로 분포하고 있습니다.")
+
+        with col2:
+            st.markdown("### 📍 Worst Point 상세 정보")
+            if worst_row["편차"] > 0:
+                st.error(f"**최대 편차 측정값: {worst_row['VALUE']:.4f}**")
+                st.write(f"• 데이터 순번(Index): {worst_idx}")
+                st.write(f"• 규격 대비 편차량: {worst_row['편차']:.4f}")
+                st.write(f"• 해당 데이터 판정: {worst_row['판정']}")
+            else:
+                st.info("✅ Worst 포인트가 없습니다. (전체 양호)")
 
 # =========================
 # 🧮 계산기
@@ -177,7 +196,6 @@ elif menu == "🧮 계산기":
         lower_tol = col3.number_input("하한공차 (-)", value=0.0, format="%.4f")
         measure = col4.number_input("측정값 (Value)", value=0.0, format="%.4f")
         
-        # 합격 범위 계산 (절대값 처리를 통해 부호 실수 방지)
         min_limit = target - abs(lower_tol)
         max_limit = target + abs(upper_tol)
         
