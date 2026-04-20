@@ -304,9 +304,7 @@ def run_quality_calculator():
 # ==========================================
 # 3. 메인 프로그램 제어 (Main Loop)
 # ==========================================
-# ==========================================
-# 3. 메인 프로그램 제어 (Main Loop)
-# ==========================================
+
 def main():
     if 'reset_key' not in st.session_state: st.session_state.reset_key = 0
     if 'data' not in st.session_state: st.session_state.data = None
@@ -355,3 +353,6 @@ def main():
     elif menu == "🧮 품질 통합 계산기":
         st.caption("📍 단위 환산, 토크 변환 등 공정 필수 계산 도구 모음입니다.")
         run_quality_calculator()
+
+if __name__ == "__main__":
+    main()
