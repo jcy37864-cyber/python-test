@@ -246,7 +246,8 @@ elif menu == "🧮 계산기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("🧮 품질 보조 및 MMC 계산기")
     tabs = st.tabs(["🔧 토크 변환","🎯 MMC 보너스", "⚖️ 공차 판정", "📏 단위 변환", "📊 데이터 산포"])
-     with tabs[0]:
+    
+    with tabs[0]:
         v, m = st.number_input("수치", key="tv_v41"), st.selectbox("방향", ["N·m → kgf·m", "kgf·m → N·m"], key="tm_v41")
         st.success(f"결과: {v * 0.101972 if 'kgf' in m else v * 9.80665:.4f}")
          
