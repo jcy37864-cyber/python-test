@@ -37,9 +37,30 @@ st.markdown("""
 plt.rcParams['axes.unicode_minus'] = False
 plt.rc('font', family='sans-serif') 
 
-st.title("📊 품질 측정 통합 시스템")
+st.sidebar.title("🚀 주요 기능")
 menu = st.sidebar.radio("📋 메뉴 선택", ["🔄 ZXY 변환", "📈 그래프 분석", "🧮 계산기"])
 
+st.sidebar.markdown("---") # 구분선
+
+# 메뉴별 요약 설명 (사이드바 하단 표시)
+if menu == "🔄 ZXY 변환":
+    st.sidebar.info(
+        "**🔄 ZXY 변환**\n\n"
+        "측정 좌표를 표준 순서(Z→X→Y)로 자동 재배열합니다. "
+        "결과 No.는 1번부터 시작되어 목록화됩니다."
+    )
+elif menu == "📈 그래프 분석":
+    st.sidebar.info(
+        "**📈 그래프 분석**\n\n"
+        "추세 점그래프와 정밀 막대그래프를 동시 제공합니다. "
+        "Worst Point 강조 이미지가 포함된 엑셀 보고서 추출이 가능합니다."
+    )
+elif menu == "🧮 계산기":
+    st.sidebar.info(
+        "**🧮 품질 계산기**\n\n"
+        "MMC 보너스 공차 계산, 정밀 공차 판정, 단위 변환 등 "
+        "현장 실무에 필요한 필수 수식을 제공합니다."
+    )
 # =========================
 # 🔄 1. ZXY 변환 (No. 1부터 시작)
 # =========================
