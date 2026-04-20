@@ -4,8 +4,8 @@ import numpy as np
 import plotly.graph_objects as go
 from io import BytesIO
 
-# --- 1. 페이지 설정 및 디자인 (기존 유지) ---
-st.set_page_config(page_title="품질 통합 분석 시스템 v8.91", layout="wide")
+# --- 1. 페이지 설정 및 디자인 (원본 유지) ---
+st.set_page_config(page_title="품질 통합 분석 시스템 v9.0", layout="wide")
 
 st.markdown("""
     <style>
@@ -16,6 +16,12 @@ st.markdown("""
         background-color: #ef4444 !important; color: white !important;
         font-weight: bold !important; width: 100%; border-radius: 8px;
     }
+    /* 캡처 안내용 스타일 */
+    .capture-info {
+        background-color: #e0f2fe; padding: 10px; border-radius: 5px; 
+        border: 1px solid #7dd3fc; color: #0369a1; font-size: 0.9em;
+        margin-bottom: 20px; text-align: center;
+    }
     .stBox { background-color: #ffffff; padding: 25px; border-radius: 15px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); margin-bottom: 25px; }
     .report-card { background-color: #f1f5f9; padding: 20px; border-left: 10px solid #3b82f6; border-radius: 8px; line-height: 2.0; font-size: 1.1em; }
     .guide-box { padding: 15px; background-color: #f8fafc; border-radius: 10px; border: 1px dashed #cbd5e1; margin-bottom: 15px; }
@@ -25,7 +31,7 @@ st.markdown("""
 if 'reset_key' not in st.session_state: st.session_state.reset_key = 0
 
 # --- 2. 사이드바 ---
-st.sidebar.title("💎 품질 통합 플랫폼 v8.91")
+st.sidebar.title("💎 품질 통합 플랫폼 v9.0")
 menu = st.sidebar.radio("📋 업무 선택", ["🔄 데이터 변환기", "📈 멀티 캐비티 분석", "🎯 위치도(MMC) 분석", "🧮 품질 계산기"], key=f"m_{st.session_state.reset_key}")
 
 st.sidebar.markdown("---")
@@ -49,7 +55,7 @@ if menu == "🔄 데이터 변환기":
             st.download_button("📥 결과 CSV 저장", df_res.to_csv(index=False).encode('utf-8-sig'), "converted_data.csv", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- [메뉴 2] 멀티 캐비티 분석 (에러 수정 지점) ---
+# --- [메뉴 2] 멀티 캐비티 분석 ---
 elif menu == "📈 멀티 캐비티 분석":
     st.title("📊 핀 높이 멀티 캐비티 통합 분석")
     def get_cav_template():
@@ -68,15 +74,11 @@ elif menu == "📈 멀티 캐비티 분석":
         y_min, y_max = np.nanmin(all_vals) - 0.03, np.nanmax(all_vals) + 0.03
         
         c_grid = st.columns(2)
-        summary_results = []
+        summary_items = []
         for i, cav in enumerate(cav_cols):
             color = cav_colors[i % len(cav_colors)]
             df[f"{cav}_판정"] = df.apply(lambda x: "OK" if x["SPEC_MIN"] <= x[cav] <= x["SPEC_MAX"] else "NG", axis=1)
-            
-            # 합격률 계산
-            pass_rate = ((len(df) - len(df[df[f"{cav}_판정"] == "NG"])) / len(df)) * 100
-            summary_results.append(f"✅ **{cav}**: 합격률 **{pass_rate:.1f}%**")
-            
+            summary_items.append(f"✅ **{cav}**: 합격률 **{((len(df)-len(df[df[f'{cav}_판정']=='NG']))/len(df))*100:.1f}%**")
             with c_grid[i % 2]:
                 st.markdown(f'<div class="stBox"><b style="color:{color}; font-size:1.1em;">{cav}</b>', unsafe_allow_html=True)
                 fig = go.Figure()
@@ -94,15 +96,14 @@ elif menu == "📈 멀티 캐비티 분석":
         fig_total.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MIN"], name="MIN", line=dict(color="blue", dash="dot")))
         fig_total.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MAX"], name="MAX", line=dict(color="red", dash="dot")))
         for i, cav in enumerate(cav_cols):
-            fig_total.add_trace(go.Scatter(x=df["Point"], y=df[cav], mode='markers+lines', name=cav, marker=dict(color=cav_colors[i%len(cav_colors)], size=10)))
+            fig_total.add_trace(go.Scatter(x=df["Point"], y=df[cav], mode='markers', name=cav, marker=dict(color=cav_colors[i%len(cav_colors)], size=10)))
         fig_total.add_trace(go.Scatter(x=df["Point"], y=df['Avg'], name="전체평균", line=dict(color="black", width=3)))
         st.plotly_chart(fig_total, use_container_width=True)
         
-        # 안내 문구 및 레포트 카드
-        st.info("💡 그래프 우측 상단 '카메라 아이콘'을 클릭하면 이미지를 저장할 수 있습니다.")
-        summary_html = "<br>".join(summary_results)
-        st.markdown(f'<div class="report-card">{summary_html}</div>', unsafe_allow_html=True)
+        # [추가] 그래프 캡처 안내
+        st.markdown('<div class="capture-info">📸 그래프 우측 상단 <b>카메라 아이콘</b>을 누르면 이미지가 즉시 저장됩니다.</div>', unsafe_allow_html=True)
         
+        st.markdown(f'<div class="report-card">{"<br>".join(summary_items)}</div>', unsafe_allow_html=True)
         out_cav = BytesIO(); writer = pd.ExcelWriter(out_cav, engine='xlsxwriter'); df.to_excel(writer, index=False); writer.close()
         st.download_button("📥 분석 결과 엑셀 저장", out_cav.getvalue(), "Cavity_Result.xlsx", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -128,7 +129,10 @@ elif menu == "🎯 위치도(MMC) 분석":
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
         st.markdown("""
         <div class="guide-box">
-            🔵 <span style="color:blue">파란 점선</span>: 중심 관리 (±0.05) | 🟣 <span style="color:purple">보라 실선</span>: <b>합격 공차</b> | 🔴 <span style="color:red">빨간 점선</span>: 한계선
+            <b>📍 위치도 과녁 가이드 설명</b><br>
+            🔵 <span style="color:blue">파란 점선</span>: 중심 정밀 관리 구역 (±0.05)<br>
+            🟣 <span style="color:purple">보라 실선</span>: <b>최종 합격 공차 범위</b> (MMC 보너스 포함)<br>
+            🔴 <span style="color:red">빨간 점선</span>: 공차 한계선 (경계 구역)
         </div>
         """, unsafe_allow_html=True)
         
@@ -143,8 +147,9 @@ elif menu == "🎯 위치도(MMC) 분석":
             p_c = '#10b981' if r['판정']=="OK" else '#ef4444'
             fig_m.add_trace(go.Scatter(x=[r['X편차']], y=[r['Y편차']], mode='markers+text', text=[f"<b>{int(r['측정포인트'])}</b>"], textposition="top center", marker=dict(size=12, color=p_c, line=dict(width=1, color='white'))))
         
-        st.plotly_chart(fig_m, use_container_width=True, config={'toImageButtonOptions': {'format': 'png', 'filename': 'Position_Result', 'scale': 2}})
-        st.info("👆 그래프 우측 상단 '카메라 아이콘'을 누르면 고화질 이미지가 저장됩니다.")
+        # [추가] 고해상도 캡처를 위한 설정 반영
+        st.plotly_chart(fig_m, use_container_width=True, config={'toImageButtonOptions': {'format': 'png', 'filename': 'Position_Target', 'scale': 2}})
+        st.markdown('<div class="capture-info">📸 그래프 우측 상단 <b>카메라 아이콘</b>을 누르면 고화질 PNG 이미지가 저장됩니다.</div>', unsafe_allow_html=True)
         
         st.subheader("📋 실측 데이터 확인")
         st.dataframe(df_m.style.map(lambda x: 'background-color: #d1fae5' if x == 'OK' else 'background-color: #fee2e2', subset=['판정']), use_container_width=True)
@@ -153,11 +158,20 @@ elif menu == "🎯 위치도(MMC) 분석":
         st.download_button("📥 위치도 분석 결과 저장 (Excel)", out_pos.getvalue(), "Position_Analysis.xlsx", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- [메뉴 4] 품질 계산기 ---
+# --- [메뉴 4] 품질 계산기 (원본 완벽 복구) ---
 elif menu == "🧮 품질 계산기":
     st.title("🧮 품질 종합 계산기")
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     tabs = st.tabs(["🎯 MMC 보너스", "🔧 일반 단위환산", "⚙️ 토크 변환", "⚖️ 합격 판정"])
+    with tabs[0]:
+        base_g = st.number_input("기본 기하공차", value=0.05)
+        mmc_s = st.number_input("MMC 규격", value=10.00)
+        act_s = st.number_input("현재 실측", value=10.02)
+        st.metric("최종 공차", f"{base_g + max(0, act_s - mmc_s):.4f}")
+    with tabs[1]:
+        v = st.number_input("값", value=1.0)
+        m = st.selectbox("종류", ["mm ➔ inch", "inch ➔ mm"])
+        st.success(f"결과: {v/25.4:.4f}" if "inch" in m[:4] else f"결과: {v*25.4:.4f}")
     with tabs[2]:
         t_v = st.number_input("토크 값 입력", value=1.0)
         t_m = st.selectbox("단위", ["N·m ➔ kgf·m", "kgf·m ➔ N·m", "N·m ➔ kgf·cm", "kgf·cm ➔ N·m"])
@@ -166,5 +180,10 @@ elif menu == "🧮 품질 계산기":
         elif t_m == "N·m ➔ kgf·cm": res = t_v * 10.197
         else: res = t_v * 0.09806
         st.info(f"변환 결과: {res:.4f}")
-    # (나머지 탭 생략 - 기존과 동일)
+    with tabs[3]:
+        spec = st.number_input("기준")
+        u, l = st.number_input("상한"), st.number_input("하한")
+        m_v = st.number_input("측정")
+        if (spec+l) <= m_v <= (spec+u): st.success("✅ 합격")
+        else: st.error("🚨 불합격")
     st.markdown('</div>', unsafe_allow_html=True)
