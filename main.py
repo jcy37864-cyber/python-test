@@ -358,8 +358,10 @@ def run_position_analysis():
             ax.set_xlim(-limit, limit)
             ax.set_ylim(-limit, limit)
             
+            # 1. 그래프 출력
             st.pyplot(fig)
-            # --- [추가] 분석 결과 요약 가이드 ---
+
+            # 2. 💡 데이터 분석 가이드 (AI Summary)
             st.divider()
             st.subheader("💡 데이터 분석 가이드 (AI Summary)")
             
@@ -373,29 +375,62 @@ def run_position_analysis():
             avg_dev_x = dev_x.mean()
             avg_dev_y = dev_y.mean()
 
-            # 요약 리포트 출력
-            col1, col2, col3 = st.columns(3)
-            col1.metric("전체 샘플 수", f"{total_count}개")
-            col2.metric("합격률", f"{ok_rate:.1f}%", delta=f"-{ng_count} NG" if ng_count > 0 else "All Pass")
+            # 요약 리포트 지표 출력
+            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1.metric("전체 샘플 수", f"{total_count}개")
+            col_m2.metric("합격률", f"{ok_rate:.1f}%", delta=f"-{ng_count} NG" if ng_count > 0 else "All Pass", delta_color="inverse")
+            col_m3.metric("평균 편차(X, Y)", f"{avg_dev_x:.3f}, {avg_dev_y:.3f}")
             
-            # 밀림 방향 진단
-            direction_x = "오른쪽(+)" if avg_dev_x > 0 else "왼쪽(-)"
-            direction_y = "위쪽(+)" if avg_dev_y > 0 else "아래쪽(-)"
+            # 밀림 방향 진단 텍스트
+            dir_x = "오른쪽(+)" if avg_dev_x > 0 else "왼쪽(-)"
+            dir_y = "위쪽(+)" if avg_dev_y > 0 else "아래쪽(-)"
             
             advice = f"""
-            * **종합 판정:** 현재 합격률은 **{ok_rate:.1f}%**입니다.
-            * **경향성 분석:** 데이터가 전체적으로 **{direction_x}**으로 `{abs(avg_dev_x):.3f}mm`, **{direction_y}**으로 `{abs(avg_dev_y):.3f}mm` 밀려 있습니다.
-            * **조치 권고:** 1. 그래프 상의 빨간 점들이 선형을 이루고 있다면 **장비 보정(Offset)**을 우선 확인하세요.
-                2. 특정 포인트에서만 NG가 난다면 해당 위치의 **공구 마모나 지그 고정** 상태를 점검해야 합니다.
+            * **종합 판정:** 현재 전체 합격률은 **{ok_rate:.1f}%**입니다.
+            * **경향성 분석:** 데이터가 전체적으로 **{dir_x}**으로 `{abs(avg_dev_x):.3f}mm`, **{dir_y}**으로 `{abs(avg_dev_y):.3f}mm` 밀려 있습니다.
+            * **조치 권고:** 1. 그래프 상의 점들이 한쪽 방향으로 줄지어 있다면 **장비 원점(Offset) 보정**을 검토하세요.
+                2. 특정 샘플만 튀는 경우 **지그(Jig) 고정력이나 이물질** 확인이 필요합니다.
             """
-            st.info(advice) 
+            st.info(advice)
+
+            # 3. 💾 분석 결과 내보내기 (엑셀 & 이미지)
+            st.divider()
+            st.subheader("💾 분석 결과 저장")
             
-            # 통계 출력
-            ok_count = (df_m['판정'] == "✅ OK").sum()
-            st.success(f"✅ 분석 완료: 전체 {len(df_m)}개 중 {ok_count}개 합격")
+            col_dl1, col_dl2 = st.columns(2)
+
+            # (1) 엑셀 다운로드
+            with col_dl1:
+                excel_buffer = BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    df_m.to_excel(writer, index=False, sheet_name='Position_Analysis')
+                
+                st.download_button(
+                    label="📂 Excel 결과 다운로드",
+                    data=excel_buffer.getvalue(),
+                    file_name="Position_Analysis_Report.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+            # (2) 그래프 이미지 저장
+            with col_dl2:
+                img_buffer = BytesIO()
+                fig.savefig(img_buffer, format="png", bbox_inches='tight', dpi=300)
+                
+                st.download_button(
+                    label="🖼️ 그래프 이미지 저장",
+                    data=img_buffer.getvalue(),
+                    file_name="Position_Scatter_Plot.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+
+            # 최종 성공 메시지
+            st.success(f"✅ 분석 완료: {total_count}개 중 {ok_count}개 합격 (불합격 {ng_count}개)")
 
         except Exception as e:
-            st.error(f"⚠️ 그래프 생성 중 오류 발생: {e}")
+            st.error(f"⚠️ 분석 중 오류 발생: {e}")
             
 def run_quality_calculator():
     """메뉴 4: 품질 계산기"""
