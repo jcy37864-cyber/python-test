@@ -68,8 +68,7 @@ def run_data_converter():
 
                 processed_results = []
                 
-               # run_data_converter 함수 내부의 데이터 처리 루프를 아래로 교체해 주세요.
-
+               # run_data_converter 내부 루프 수정
                 for i in range(0, len(lines), 4):
                     if i + 3 >= len(lines): break 
                     
@@ -78,27 +77,24 @@ def run_data_converter():
                         x_line = lines[i+2]
                         y_line = lines[i+3]
                         
-                        # 1. 도면치수(Nominal)는 줄의 맨 앞(0번 혹은 1번)에서 찾음
+                        # 1. 도면치수 추출
                         nom_x = clean_float(x_line[0]) if len(x_line) > 0 else 0.0
                         nom_y = clean_float(y_line[0]) if len(y_line) > 0 else 0.0
 
-                        # 2. 진짜 데이터는 보통 줄의 뒤쪽(Ref 이후)에 있음
-                        # 성적서 양식상 'Ref'(PIN이름)가 위치한 인덱스를 찾아 그 이후 데이터만 추출
-                        # 만약 Ref 위치를 찾기 어려우면, 뒤에서부터 4개를 가져오는 방식이 가장 안전합니다.
-                        
-                        sample_count = 4  # 우리는 무조건 4개의 샘플(1.nmp ~ 4.nmp)만 필요함
+                        # 2. 캐비티(샘플) 개수 자동 계산
+                        # 줄의 뒷부분에서 실제로 측정값이 들어있는 칸들만 필터링합니다.
+                        # 보통 .nmp 문구가 포함된 열의 개수를 세거나, 뒤에서부터 숫자인 것만 셉니다.
+                        actual_data_x = [v for v in x_line if re.search(r'\d', str(v))][1:] # 첫번째(Nominal) 제외
+                        sample_count = len(actual_data_x) 
                         
                         for s in range(sample_count):
-                            # 뒤에서부터 4, 3, 2, 1번째 데이터를 가져옵니다 (오른쪽 정렬 기준)
+                            # 뒤에서부터 sample_count만큼 가져오기
                             idx = -(sample_count - s) 
                             
                             act_x = clean_float(x_line[idx])
                             act_y = clean_float(y_line[idx])
-                            # MMC 지름도 뒤에서 해당 순서 데이터를 가져옴
                             act_dia = clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
                             
-                            # 포인트 이름 추출 (PIN2, PIN3 등)
-                            # 보통 데이터 앞 혹은 중간에 문자열로 존재
                             pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), "Unknown")
 
                             processed_results.append({
@@ -109,8 +105,7 @@ def run_data_converter():
                                 "측정치_X": act_x,
                                 "측정치_Y": act_y,
                                 "실측지름_MMC용": act_dia
-                            })
-                    except Exception as inner_e:
+                            })                    except Exception as inner_e:
                         continue
 
                 # --- 결과 출력 및 안내 (이 부분이 질문하신 핵심 내용) ---
