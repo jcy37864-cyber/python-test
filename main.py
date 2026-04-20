@@ -47,26 +47,30 @@ def clean_float(value):
 
 def run_data_converter():
     st.header("🔄 성적서 데이터 자동 변환기")
-    st.info("💡 **도면치수(Nominal)** 열부터 데이터 끝(**4.nmp, 6.nmp 등**)까지 복사해서 붙여넣으세요.")
+    
+    # 1. 캐비티 수 선택 (유저가 직접 지정하여 오류 방지)
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        sample_count = st.number_input("🔢 샘플(캐비티) 수", min_value=1, max_value=20, value=4)
+    with col2:
+        st.info(f"💡 현재 **{sample_count}개**의 샘플을 추출하도록 설정되었습니다.")
 
-    # 데이터 입력창 (가이드 문구 포함)
+    # 2. 데이터 입력창
     raw_data = st.text_area(
         "성적서 데이터를 붙여넣으세요", 
         height=300, 
-        placeholder="Nominal 열부터 끝까지 드래그하여 복사한 내용을 여기에 붙여넣으세요.\n캐비티 개수는 자동으로 감지됩니다."
+        placeholder="Nominal 열부터 끝까지 복사해서 붙여넣으세요."
     )
 
     if st.button("🚀 분석 데이터로 변환"):
         if raw_data:
             try:
-                # 1. 텍스트 데이터를 행 단위로 나누기
                 lines = [line.split('\t') for line in raw_data.strip().split('\n')]
                 if len(lines[0]) <= 1:
                     lines = [re.split(r'\s{2,}', line.strip()) for line in raw_data.strip().split('\n')]
 
                 processed_results = []
                 
-                # 2. 4줄씩 한 세트 처리
                 for i in range(0, len(lines), 4):
                     if i + 3 >= len(lines): break 
                     
@@ -75,43 +79,55 @@ def run_data_converter():
                         x_line = lines[i+2]
                         y_line = lines[i+3]
                         
-                        # [핵심] 줄에서 진짜 숫자(측정값)가 몇 개인지 찾기
-                        # 도면치수(Nominal)를 포함해 실제 데이터들만 골라냅니다.
-                        valid_numbers = [clean_float(v) for v in x_line if re.search(r'\d', str(v))]
+                        # 도면치수(Nominal)는 항상 줄의 맨 앞 숫자
+                        # 공차 숫자가 섞이지 않도록 리스트의 첫 번째 숫자만 추출
+                        all_nums_x = [clean_float(v) for v in x_line if re.search(r'\d', str(v))]
+                        nom_x = all_nums_x[0] if all_nums_x else 0.0
                         
-                        if len(valid_numbers) > 1:
-                            nom_x = valid_numbers[0] # 첫 번째 숫자는 도면치수
-                            # 나머지는 전부 샘플 데이터로 간주 (2개든 4개든 자동 대응)
-                            actual_samples_x = valid_numbers[1:] 
-                            sample_count = len(actual_samples_x)
-                            
-                            # Y축도 동일하게 처리
-                            valid_numbers_y = [clean_float(v) for v in y_line if re.search(r'\d', str(v))]
-                            nom_y = valid_numbers_y[0]
-                            actual_samples_y = valid_numbers_y[1:]
-                            
-                            # MMC 지름 라인에서도 숫자만 추출 (도면치수 칸 제외하고 뒤에서부터 추출)
-                            valid_numbers_dia = [clean_float(v) for v in lines[i+1] if re.search(r'\d', str(v))]
+                        all_nums_y = [clean_float(v) for v in y_line if re.search(r'\d', str(v))]
+                        nom_y = all_nums_y[0] if all_nums_y else 0.0
 
-                            for s in range(sample_count):
-                                act_x = actual_samples_x[s]
-                                act_y = actual_samples_y[s]
-                                # 지름 데이터는 인덱스 맞춰서 가져오기 (없으면 기본값 0.35)
-                                act_dia = valid_numbers_dia[s+1] if len(valid_numbers_dia) > s+1 else 0.35
-                                
-                                pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), f"POINT_{i//4 + 1}")
+                        # [핵심] 사용자가 설정한 개수만큼만 '뒤에서부터' 가져오기
+                        # 이렇게 하면 앞쪽에 공차(-100, 100 등)가 있어도 무시하고 진짜 데이터만 가져옵니다.
+                        for s in range(sample_count):
+                            idx = -(sample_count - s) 
+                            
+                            act_x = clean_float(x_line[idx])
+                            act_y = clean_float(y_line[idx])
+                            # MMC 지름 라인(i+1)도 동일하게 뒤에서 추출
+                            act_dia = clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
+                            
+                            pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), f"POINT_{i//4 + 1}")
 
-                                processed_results.append({
-                                    "측정포인트": f"{pin_name}_S{s+1}",
-                                    "기본공차": 0.35,
-                                    "도면치수_X": nom_x,
-                                    "도면치수_Y": nom_y,
-                                    "측정치_X": act_x,
-                                    "측정치_Y": act_y,
-                                    "실측지름_MMC용": act_dia
-                                })
-                    except Exception as inner_e:
+                            processed_results.append({
+                                "측정포인트": f"{pin_name}_S{s+1}",
+                                "기본공차": 0.35,
+                                "도면치수_X": nom_x,
+                                "도면치수_Y": nom_y,
+                                "측정치_X": act_x,
+                                "측정치_Y": act_y,
+                                "실측지름_MMC용": act_dia
+                            })
+                    except Exception:
                         continue
+
+                # 3. 결과 출력
+                if processed_results:
+                    df_result = pd.DataFrame(processed_results)
+                    df_result.index = df_result.index + 1 # 1번부터 표시
+                    
+                    st.success(f"✅ 변환 완료! (포인트당 {sample_count}개씩 총 {len(processed_results)}개)")
+                    st.dataframe(df_result, use_container_width=True)
+                    
+                    st.session_state.data = df_result
+                    st.balloons()
+                    st.info("🎯 상단의 **'📊 Step 2. 위치도 결과 분석'** 탭으로 이동하세요.")
+                else:
+                    st.error("데이터를 분석할 수 없습니다.")
+
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
+                        
                # 3. 결과 출력
                 if processed_results:
                     df_result = pd.DataFrame(processed_results)
