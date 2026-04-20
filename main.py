@@ -305,83 +305,56 @@ def run_position_analysis():
             except AttributeError:
                 st.dataframe(final_display.style.applymap(highlight_pass_fail, subset=['판정']), use_container_width=True)
 
-           # 3. 🎨 위치도 산포도 그래프 작성 (공차 구역 구분 버전)
+           # 3. 🎨 위치도 산포도 분석 (영역 구분 버전)
             st.divider()
-            st.subheader("🎯 위치도 산포도 분석 (Tolerance Zones)")
+            st.subheader("🎯 위치도 산포도 분석 (Basic vs MMC Zone)")
             
             fig, ax = plt.subplots(figsize=(8, 8))
             
-            # 편차 계산
+            # 데이터 편차 계산
             dev_x = df_m['측정치_X'] - df_m['도면치수_X']
             dev_y = df_m['측정치_Y'] - df_m['도면치수_Y']
             
-            # 1️⃣ 기본 공차 원 (Ø0.35 기준 -> 반지름 0.175)
+            # 🔵 1. 기본 공차 영역 (Ø0.35)
             basic_radius = 0.35 / 2
-            circle_basic = plt.Circle((0, 0), basic_radius, color='blue', fill=True, 
-                                      alpha=0.1, linestyle='--', label=f'Basic Tol (Ø0.35)')
+            circle_basic = plt.Circle((0, 0), basic_radius, color='#3498db', fill=True, 
+                                      alpha=0.15, linestyle='--', label='Basic Tolerance (Ø0.35)')
             ax.add_patch(circle_basic)
-            ax.add_patch(plt.Circle((0, 0), basic_radius, color='blue', fill=False, linestyle='--'))
+            # 기본 공차 테두리
+            ax.add_patch(plt.Circle((0, 0), basic_radius, color='#3498db', fill=False, linestyle='--', linewidth=1.5))
 
-            # 2️⃣ 최종 공차 원 (MMC 보너스 포함 -> 빨간색)
-            # 데이터 중 가장 큰 최종공차를 기준으로 원을 그려 시각적 가이드 제공
+            # 🔴 2. MMC 확장 공차 영역 (최종 공차)
+            # 샘플 중 가장 큰 공차를 시각적 기준으로 표시
             max_final_tol = df_m['최종공차'].max()
             max_radius = max_final_tol / 2
-            circle_mmc = plt.Circle((0, 0), max_radius, color='red', fill=False, 
-                                    linewidth=2, label=f'Max MMC Tol (Ø{max_final_tol})')
+            circle_mmc = plt.Circle((0, 0), max_radius, color='#e74c3c', fill=False, 
+                                    linewidth=2, label=f'Max MMC Allowed (Ø{max_final_tol:.3f})')
             ax.add_patch(circle_mmc)
             
-            # 데이터 포인트
+            # 🟢 3. 측정 데이터 포인트
+            # 판정에 따라 점 색상 변경
             colors = df_m['판정'].apply(lambda x: '#2ecc71' if 'OK' in x else '#e74c3c')
-            ax.scatter(dev_x, dev_y, c=colors, s=60, edgecolors='white', zorder=5, label='Measured Points')
+            ax.scatter(dev_x, dev_y, c=colors, s=70, edgecolors='white', zorder=5, label='Measured Points')
             
-            # 그래프 꾸미기
-            ax.axhline(0, color='black', linewidth=1)
-            ax.axvline(0, color='black', linewidth=1)
-            ax.set_xlabel("Deviation X")
-            ax.set_ylabel("Deviation Y")
-            ax.set_title("Position Error: Basic vs MMC Zone", fontsize=15)
+            # 그래프 레이아웃 설정
+            ax.axhline(0, color='black', linewidth=1.2) # X축 중심선
+            ax.axvline(0, color='black', linewidth=1.2) # Y축 중심선
+            ax.set_xlabel("Deviation X", fontsize=12)
+            ax.set_ylabel("Deviation Y", fontsize=12)
+            ax.set_title("Position Error: Basic vs MMC Extension", fontsize=14, fontweight='bold', pad=20)
+            
             ax.grid(True, linestyle=':', alpha=0.6)
-            ax.set_aspect('equal')
+            ax.set_aspect('equal') # 1:1 비율 유지 (원형 보존)
             
-            # 범례 추가
-            ax.legend(loc='upper right')
+            # 범례 표시
+            ax.legend(loc='upper right', frameon=True, shadow=True)
             
-            # 축 범위 조절
-            limit = max_radius * 1.5
+            # 축 범위 자동 설정 (공차 영역보다 20% 여유 있게)
+            limit = max_radius * 1.2
             ax.set_xlim(-limit, limit)
             ax.set_ylim(-limit, limit)
             
             st.pyplot(fig)
-            
-            # 편차 계산 (중심을 0,0으로 만들기 위함)
-            dev_x = df_m['측정치_X'] - df_m['도면치수_X']
-            dev_y = df_m['측정치_Y'] - df_m['도면치수_Y']
-            
-            # 최대 공차원 그리기 (시각적 가이드)
-            max_tol = df_m['최종공차'].max() / 2
-            circle = plt.Circle((0, 0), max_tol, color='red', fill=False, linestyle='--', label=f'Max Tolerance (Ø{df_m["최종공차"].max()})')
-            ax.add_patch(circle)
-            
-            # 데이터 포인트 찍기
-            colors = df_m['판정'].apply(lambda x: 'green' if 'OK' in x else 'red')
-            ax.scatter(dev_x, dev_y, c=colors, s=50, edgecolors='white', label='Measured Points')
-            
-            # 그래프 디테일 설정
-            ax.axhline(0, color='black', linewidth=1)
-            ax.axvline(0, color='black', linewidth=1)
-            ax.set_xlabel("Deviation X")
-            ax.set_ylabel("Deviation Y")
-            ax.set_title("Position Error Distribution")
-            ax.grid(True, linestyle=':', alpha=0.6)
-            ax.set_aspect('equal') # 비율을 1:1로 고정하여 원이 찌그러지지 않게 함
-            
-            # 축 범위 자동 조절 (공차원보다 살짝 크게)
-            limit = max_tol * 1.5 if max_tol > 0 else 0.5
-            ax.set_xlim(-limit, limit)
-            ax.set_ylim(-limit, limit)
-            
-            st.pyplot(fig)
-            
             # 통계 출력
             ok_count = (df_m['판정'] == "✅ OK").sum()
             st.success(f"✅ 분석 완료: 전체 {len(df_m)}개 중 {ok_count}개 합격")
