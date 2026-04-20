@@ -7,9 +7,9 @@ import platform
 # 1. 페이지 설정
 st.set_page_config(page_title="품질 측정 통합 프로그램", layout="wide")
 
-# 2. 그래프 폰트 설정 (영문 기본 폰트 사용으로 깨짐 방지)
+# 2. 그래프 폰트 설정 (그래프 내부 글자 깨짐 방지를 위해 영문 기본 폰트 사용)
 plt.rcParams['axes.unicode_minus'] = False
-plt.rc('font', family='sans-serif') # 표준 영문 폰트 사용
+plt.rc('font', family='sans-serif') 
 
 # 3. 사이드바 스타일
 st.markdown("""
@@ -19,24 +19,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Quality Measurement System")
+st.title("📊 품질 측정 통합 프로그램")
 
 menu = st.sidebar.radio(
-    "Select Menu",
-    ["🔄 ZXY Transform", "📈 Graph Analysis", "🧮 Calculator"]
+    "메뉴 선택",
+    ["🔄 ZXY 변환", "📈 그래프 분석", "🧮 계산기"]
 )
 
 # =========================
-# 🔄 ZXY 변환 (가로 배열)
+# 🔄 ZXY 변환 (기존 세로 쌓기 로직)
 # =========================
-if menu == "🔄 ZXY Transform":
-    st.subheader("🔄 ZXY Data Transformation")
+if menu == "🔄 ZXY 변환":
+    st.subheader("🔄 ZXY 데이터 변환")
+    st.info("X, Y, Z를 입력하면 [Z -> X -> Y] 순서로 데이터가 세로로 쌓여 결과가 생성됩니다.")
 
     if "df_zxy" not in st.session_state:
         st.session_state.df_zxy = pd.DataFrame({
-            "X": [""] * 10,
-            "Y": [""] * 10,
-            "Z": [""] * 10,
+            "X": [""] * 100,
+            "Y": [""] * 100,
+            "Z": [""] * 100,
         })
 
     edited_df = st.data_editor(
@@ -45,38 +46,39 @@ if menu == "🔄 ZXY Transform":
         num_rows="dynamic"
     )
 
-    if st.button("Generate ZXY"):
+    if st.button("ZXY 결과 생성"):
         results = []
         for _, row in edited_df.iterrows():
             x = str(row["X"]).strip()
             y = str(row["Y"]).strip()
             z = str(row["Z"]).strip()
-            if x or y or z:
-                # 가로로 Z, X, Y 배치
-                results.append({"Z": z, "X": x, "Y": y})
+
+            if x and y and z:
+                # 초기 요청 로직: Z, X, Y 순으로 리스트에 순차 추가 (세로 출력용)
+                results.extend([z, x, y])
 
         if results:
-            result_df = pd.DataFrame(results)
+            result_df = pd.DataFrame(results, columns=["변환 결과"])
             st.dataframe(result_df, use_container_width=True)
             csv = result_df.to_csv(index=False).encode("utf-8-sig")
-            st.download_button("Download CSV", csv, "zxy_result.csv")
+            st.download_button("📂 CSV 다운로드", csv, "zxy_result.csv")
         else:
-            st.warning("No data entered.")
+            st.warning("변환할 데이터를 입력해주세요.")
 
 # =========================
-# 📈 그래프 분석 (기능 완전 복구)
+# 📈 그래프 분석 (기능 완전 복구 + 그래프 영문 표기)
 # =========================
-elif menu == "📈 Graph Analysis":
-    st.subheader("📈 Quality Graph Analysis")
+elif menu == "📈 그래프 분석":
+    st.subheader("📈 품질 그래프 분석")
 
-    uploaded_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"])
+    uploaded_file = st.file_uploader("엑셀 또는 CSV 파일 업로드", type=["xlsx", "csv"])
 
-    # 템플릿 다운로드 기능
+    # 템플릿 다운로드
     template = pd.DataFrame({"MIN": [30.1], "MAX": [30.7], "VALUE": [30.3]})
     tmp_out = BytesIO()
     with pd.ExcelWriter(tmp_out, engine="openpyxl") as writer:
         template.to_excel(writer, index=False)
-    st.download_button("📄 Download Template", tmp_out.getvalue(), "template.xlsx")
+    st.download_button("📄 템플릿 다운로드", tmp_out.getvalue(), "template.xlsx")
 
     if uploaded_file:
         if uploaded_file.name.endswith(".csv"):
@@ -88,18 +90,18 @@ elif menu == "📈 Graph Analysis":
         df["판정"] = df.apply(lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG", axis=1)
         df["편차"] = df.apply(lambda x: max(x["VALUE"] - x["MAX"], x["MIN"] - x["VALUE"], 0), axis=1)
 
-        # NG 강조 테이블
+        # NG 강조 테이블 (한글 판정 유지)
         def highlight_ng(row):
             return ['background-color: #ffcccc' if row["판정"] == "NG" else '' for _ in row]
         st.dataframe(df.style.apply(highlight_ng, axis=1), use_container_width=True)
 
-        # 📊 그래프 생성
+        # 📊 그래프 생성 (내부 텍스트는 깨짐 방지를 위해 영문 유지)
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(df["VALUE"], marker='o', label="VALUE", zorder=3)
         ax.plot(df["MIN"], linestyle='--', color='orange', label="MIN")
         ax.plot(df["MAX"], linestyle='--', color='green', label="MAX")
 
-        # NG 포인트 및 Worst 포인트 강조
+        # NG 및 Worst 포인트 강조
         worst_idx = df["편차"].idxmax()
         worst_row = df.loc[worst_idx]
 
@@ -109,12 +111,12 @@ elif menu == "📈 Graph Analysis":
 
         if worst_row["편차"] > 0:
             ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', s=300, linewidths=3, zorder=5)
-            # 글자 시인성 강화 (말풍선 형태)
+            # 워스트 포인트 말풍선 (가독성 개선)
             ax.text(worst_idx, worst_row["VALUE"], f" Worst: {worst_row['VALUE']:.3f} ", 
                     fontsize=10, color='black', fontweight='bold', ha='center', va='bottom',
                     bbox=dict(facecolor='white', alpha=0.9, edgecolor='red', boxstyle='round,pad=0.5'), zorder=6)
 
-        # 수치 표시 (영문)
+        # 수치 표시
         ax.text(len(df)-1, df["MAX"].iloc[-1], f"MAX: {df['MAX'].iloc[-1]:.3f}", color='green', ha='right')
         ax.text(len(df)-1, df["MIN"].iloc[-1], f"MIN: {df['MIN'].iloc[-1]:.3f}", color='orange', ha='right')
 
@@ -125,78 +127,79 @@ elif menu == "📈 Graph Analysis":
         ax.grid(True, linestyle=':', alpha=0.6)
         st.pyplot(fig)
 
-        # 📸 이미지 다운로드
+        # 이미지 다운로드
         img_buffer = BytesIO()
         fig.savefig(img_buffer, format='png', bbox_inches='tight')
-        st.download_button("📸 Save Graph Image", img_buffer.getvalue(), "quality_graph.png", "image/png")
+        st.download_button("📸 그래프 이미지 저장", img_buffer.getvalue(), "quality_graph.png", "image/png")
 
-        # 🔥 [복구] 검사 결과 요약
+        # 🔥 [완전 복구] 검사 결과 요약 (한글)
         st.markdown("---")
-        st.markdown("### 📋 Analysis Summary")
+        st.markdown("### 📋 검사 결과 요약")
         total = len(df)
-        ng = len(df[df["판정"] == "NG"])
-        ok = total - ng
+        ng_count = len(df[df["판정"] == "NG"])
+        ok_count = total - ng_count
 
-        st.write(f"▶ Total Samples: {total} / OK: {ok} / NG: {ng}")
+        st.write(f"▶ **총 데이터:** {total}개 / **양호(OK):** {ok_count}개 / **불량(NG):** {ng_count}개")
 
-        if ng == 0:
-            st.success("Result: ALL PASS (Within Specifications)")
-        elif ng / total > 0.3:
-            st.error("Result: HIGH NG RATE - Process Check Required!")
+        if ng_count == 0:
+            st.success("✅ 판정: 전체 양호 (모든 값이 규격 내에 있음)")
+        elif ng_count / total > 0.3:
+            st.error("🚨 판정: NG 다수 발생 → 공정 이상 가능성 높음")
         else:
-            st.warning("Result: SOME NG FOUND - Deviation Warning")
+            st.warning("⚠️ 판정: 일부 NG 발생 → 공정 편차 확인 필요")
 
-        # [복구] 평균 분석
+        # [완전 복구] 평균 경향 분석 (한글)
         avg_val = df["VALUE"].mean()
         avg_max = df["MAX"].mean()
         avg_min = df["MIN"].mean()
 
         if avg_val > avg_max:
-            st.error("Trend: Overall Above Upper Limit")
+            st.error("📉 경향: 전체적으로 상한 규격을 초과하는 경향이 있음")
         elif avg_val < avg_min:
-            st.error("Trend: Overall Below Lower Limit")
+            st.error("📈 경향: 전체적으로 하한 규격에 미달하는 경향이 있음")
         else:
-            st.info("Trend: Overall Within Specifications")
+            st.info("✔ 경향: 전체적으로 규격 내 분포가 안정적임")
 
-        # 📄 [복구] 결과 엑셀 다운로드
+        # 📄 결과 엑셀 다운로드
         excel_buffer = BytesIO()
         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
             df.to_excel(writer, index=False)
-        st.download_button("📄 Download Result Excel", excel_buffer.getvalue(), "quality_result.xlsx")
+        st.download_button("📄 결과 엑셀 다운로드", excel_buffer.getvalue(), "quality_result.xlsx")
 
 # =========================
-# 🧮 계산기 (기능 완전 복구)
+# 🧮 계산기 (한글 복구)
 # =========================
-elif menu == "🧮 Calculator":
-    st.subheader("🧮 Calculator")
-    calc = st.selectbox("Select Function", ["Torque Convert", "Sum", "Average", "Tolerance Check"])
+elif menu == "🧮 계산기":
+    st.subheader("🧮 품질 보조 계산기")
+    calc = st.selectbox("기능 선택", ["토크 변환", "합계", "평균", "공차 판정"])
 
-    if calc == "Torque Convert":
-        val = st.number_input("Value", 0.0)
-        mode = st.selectbox("Unit", ["N·m → kgf·m", "kgf·m → N·m"])
+    if calc == "토크 변환":
+        val = st.number_input("수치 입력", 0.0)
+        mode = st.selectbox("단위 변환 선택", ["N·m → kgf·m", "kgf·m → N·m"])
         if mode == "N·m → kgf·m":
-            st.success(f"Result: {val * 0.101972:.4f}")
+            st.success(f"결과: {val * 0.101972:.4f} kgf·m")
         else:
-            st.success(f"Result: {val * 9.80665:.4f}")
+            st.success(f"Result: {val * 9.80665:.4f} N·m")
 
-    elif calc == "Sum":
-        a = st.number_input("Value A", 0.0)
-        b = st.number_input("Value B", 0.0)
-        st.success(f"Sum: {a + b}")
+    elif calc == "합계":
+        a = st.number_input("값 A", 0.0)
+        b = st.number_input("값 B", 0.0)
+        st.success(f"합계 결과: {a + b}")
 
-    elif calc == "Average":
-        nums = st.text_input("Input values (comma separated)", "1, 2, 3")
+    elif calc == "평균":
+        nums = st.text_input("값 입력 (쉼표로 구분)", "1, 2, 3")
         try:
             vals = [float(x.strip()) for x in nums.split(",") if x.strip()]
-            if vals: st.success(f"Average: {sum(vals)/len(vals):.4f}")
+            if vals: st.success(f"평균 결과: {sum(vals)/len(vals):.4f}")
         except:
-            st.error("Invalid input format.")
+            st.error("입력 형식이 올바르지 않습니다.")
 
-    elif calc == "Tolerance Check":
-        t = st.number_input("Target", 0.0)
-        tol = st.number_input("Tolerance", 0.0)
-        v = st.number_input("Measured", 0.0)
+    elif calc == "공차 판정":
+        col1, col2, col3 = st.columns(3)
+        t = col1.number_input("기준값", value=0.0)
+        tol = col2.number_input("공차(±)", value=0.0)
+        v = col3.number_input("측정값", value=0.0)
         if t - tol <= v <= t + tol:
-            st.success("Judgment: OK")
+            st.success("결과: OK (합격)")
         else:
-            st.error("Judgment: NG")
+            st.error("결과: NG (불합격)")
