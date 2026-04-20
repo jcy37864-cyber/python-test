@@ -243,12 +243,12 @@ def main():
     
     if st.button("🗑️ 데이터 초기화"):
     # 버튼을 눌렀을 때 실행될 내용들은 모두 '안으로 한 칸' 들어가야 합니다.
-    if 'reset_key' not in st.session_state:
+        if 'reset_key' not in st.session_state:
         st.session_state.reset_key = 0  # 이 줄은 if문 안이라서 두 칸 들어감
     
-    st.session_state.reset_key += 1
-    st.session_state.data = None
-    st.rerun()
+        st.session_state.reset_key += 1
+        st.session_state.data = None
+        st.rerun()
     
     st.sidebar.title("💎 품질 플랫폼 v9.5")
     menu = st.sidebar.radio("📋 업무 선택", 
