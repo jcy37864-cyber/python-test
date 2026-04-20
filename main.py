@@ -6,7 +6,7 @@ import numpy as np
 from io import BytesIO
 
 # 1. 페이지 설정
-st.set_page_config(page_title="품질 측정 통합 시스템 v4.9", layout="wide")
+st.set_page_config(page_title="품질 측정 통합 시스템 v5.0", layout="wide")
 
 # 2. 커스텀 CSS
 st.markdown("""
@@ -58,7 +58,7 @@ if menu == "🔄 데이터 변환기":
             st.download_button("📂 CSV 다운로드", res_df.to_csv(index=True).encode("utf-8-sig"), "zxy_result.csv")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 📈 2. 그래프 분석 (NG 빨간색 & 데이터 레이블 복구) ---
+# --- 📈 2. 그래프 분석 (막대그래프 & 이미지 다운로드 복구) ---
 elif menu == "📈 그래프 분석":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("📁 분석 파일 업로드")
@@ -82,34 +82,31 @@ elif menu == "📈 그래프 분석":
         worst_val = df.loc[worst_idx, "VALUE"]
         ng_df = df[df["판정"] == "NG"]
 
-        # 정밀 Y축 범위
+        # [정밀 Y축 범위] 측정값의 미세한 변화를 극대화
         y_min, y_max = df["VALUE"].min(), df["VALUE"].max()
-        margin = (y_max - y_min) * 0.4 if y_max != y_min else 0.1
+        margin = (y_max - y_min) * 0.5 if y_max != y_min else 0.1
         y_range = [y_min - margin, y_max + margin]
 
-        # [화면 그래프] NG 강조 및 데이터 표시
+        # [화면 그래프 1] 추세선 (Line)
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        st.subheader("📈 실시간 품질 분석 (NG & 데이터 강조)")
-        
-        fig = go.Figure()
-        # 기본 라인
-        fig.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers+text', 
-                                 text=df["VALUE"], textposition="top center", 
-                                 name='측정값', line=dict(color='#3b82f6')))
-        # NG 포인트 빨간색 중첩
+        st.subheader("📈 측정 추세 분석 (Line)")
+        fig_l = go.Figure()
+        fig_l.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='정상', line=dict(color='#3b82f6')))
         if not ng_df.empty:
-            fig.add_trace(go.Scatter(x=ng_df.index, y=ng_df["VALUE"], mode='markers+text', 
-                                     text=ng_df["VALUE"], textposition="top center",
-                                     marker=dict(color='red', size=12), name='NG 이탈',
-                                     textfont=dict(color='red', size=14)))
-        # Worst 원형 강조
-        fig.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', 
-                                 marker=dict(color='rgba(0,0,0,0)', size=20, line=dict(color='red', width=3))))
-        fig.update_layout(yaxis_range=y_range)
-        st.plotly_chart(fig, use_container_width=True)
+            fig_l.add_trace(go.Scatter(x=ng_df.index, y=ng_df["VALUE"], mode='markers', marker=dict(color='red', size=12), name='NG'))
+        fig_l.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', marker=dict(color='rgba(0,0,0,0)', size=20, line=dict(color='red', width=3))))
+        fig_l.update_layout(yaxis_range=y_range)
+        st.plotly_chart(fig_l, use_container_width=True)
+
+        # [화면 그래프 2] 막대 그래프 (Bar) - 정밀 범위 적용
+        st.subheader("📊 샘플별 수치 비교 (Bar)")
+        fig_b = go.Figure()
+        fig_b.add_trace(go.Bar(x=df.index, y=df["VALUE"], marker_color=['red' if p == "NG" else '#3b82f6' for p in df["판정"]]))
+        fig_b.update_layout(yaxis_range=y_range)
+        st.plotly_chart(fig_b, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # 품질 분석 대시보드
+        # [대시보드 요약]
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
         st.subheader("📊 분석 결과 요약")
         c1, c2, c3, c4 = st.columns(4)
@@ -117,46 +114,46 @@ elif menu == "📈 그래프 분석":
         c2.metric("✅ 합격", f"{len(df)-len(ng_df)} EA")
         c3.metric("🚨 불량", f"{len(ng_df)} EA", delta_color="inverse")
         c4.metric("🎯 Worst", f"{worst_val:.4f}", f"Idx: {worst_idx}")
-
+        
         st.markdown("### 📝 분석 브리핑")
         if len(ng_df) == 0:
-            st.markdown('<div class="summary-box" style="border-left-color: #10b981;"><b>✅ 공정 양호:</b> 모든 데이터가 규격 내에 관리되고 있습니다.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="summary-box" style="border-left-color: #10b981;"><b>✅ 공정 상태 안정:</b> 모든 데이터가 규격 내에 있습니다.</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="summary-box" style="border-left-color: #ef4444;"><b>🚨 품질 경보:</b> {len(ng_df)}건의 규격 이탈이 감지되었습니다. Worst 지점({worst_val:.4f}) 확인 필요.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="summary-box" style="border-left-color: #ef4444;"><b>🚨 품질 경보:</b> {len(ng_df)}건의 이탈 발생. No.{worst_idx} 지점 집중 확인 필요.</div>', unsafe_allow_html=True)
 
-        # [엑셀용 정적 그래프] NG 빨간색 & 데이터 레이블 적용
-        # 1. Line
-        fig_l, ax_l = plt.subplots(figsize=(10, 4))
-        ax_l.plot(df.index, df["VALUE"], marker='o', color='#3b82f6', label='Value')
-        for i, val in enumerate(df["VALUE"]):
-            color = 'red' if df.iloc[i]["판정"] == "NG" else 'black'
-            ax_l.text(i, val, f'{val:.2f}', color=color, ha='center', va='bottom', fontsize=9, fontweight='bold')
-            if df.iloc[i]["판정"] == "NG":
-                ax_l.plot(i, val, 'ro', markersize=8) # NG 지점 빨간색 점
-        ax_l.scatter(worst_idx, worst_val, facecolors='none', edgecolors='red', s=250, lw=2)
-        ax_l.set_ylim(y_range)
-        img_l = BytesIO(); fig_l.savefig(img_l, format='png', bbox_inches='tight'); plt.close(fig_l)
+        # [엑셀 및 이미지용 정적 그래프 생성]
+        # 1. Line (숫자 레이블 제거 요청 반영)
+        fig_xl, ax_xl = plt.subplots(figsize=(10, 4))
+        ax_xl.plot(df.index, df["VALUE"], marker='o', color='#3b82f6', zorder=1)
+        if not ng_df.empty: ax_xl.scatter(ng_df.index, ng_df["VALUE"], color='red', s=80, zorder=2)
+        ax_xl.scatter(worst_idx, worst_val, facecolors='none', edgecolors='red', s=250, lw=2, zorder=3)
+        ax_xl.set_ylim(y_range)
+        img_l = BytesIO(); fig_xl.savefig(img_l, format='png', bbox_inches='tight'); plt.close(fig_xl)
 
-        # 2. Bar
-        fig_b, ax_b = plt.subplots(figsize=(10, 4))
-        bar_colors = ['red' if p == "NG" else '#3b82f6' for p in df["판정"]]
-        bars = ax_b.bar(df.index, df["VALUE"], color=bar_colors)
-        ax_b.bar_label(bars, fmt='%.2f', padding=3, fontsize=8, fontweight='bold')
-        ax_b.set_ylim(y_range)
-        img_b = BytesIO(); fig_b.savefig(img_b, format='png', bbox_inches='tight'); plt.close(fig_b)
+        # 2. Bar (막대 그래프 복구 및 정밀 범위)
+        fig_xb, ax_xb = plt.subplots(figsize=(10, 4))
+        ax_xb.bar(df.index, df["VALUE"], color=['red' if p == "NG" else '#3b82f6' for p in df["판정"]])
+        ax_xb.set_ylim(y_range)
+        img_b = BytesIO(); fig_xb.savefig(img_b, format='png', bbox_inches='tight'); plt.close(fig_xb)
 
-        # 엑셀 파일 생성
+        # [복구] 이미지 다운로드 버튼 섹션
+        st.markdown("### 📥 결과 다운로드")
+        d_col1, d_col2, d_col3 = st.columns(3)
+        
+        # 엑셀 보고서 (이미지 2개 포함)
         excel_out = BytesIO()
         with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Report')
             workbook, worksheet = writer.book, writer.sheets['Report']
-            red_fmt = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+            red_fmt = workbook.add_format({'bg_color': '#FFC7CE'})
             for i in range(len(df)):
                 if df.iloc[i]["판정"] == "NG": worksheet.set_row(i + 1, None, red_fmt)
             worksheet.insert_image('H2', 'line.png', {'image_data': img_l, 'x_scale': 0.5, 'y_scale': 0.5})
             worksheet.insert_image('H22', 'bar.png', {'image_data': img_b, 'x_scale': 0.5, 'y_scale': 0.5})
 
-        st.download_button("📂 엑셀 보고서 다운로드 (강조 적용)", excel_out.getvalue(), "Quality_Report_Final.xlsx", use_container_width=True)
+        d_col1.download_button("📂 엑셀 보고서 다운로드", excel_out.getvalue(), "Quality_Report.xlsx", use_container_width=True)
+        d_col2.download_button("🖼️ 추세(Line) 이미지 저장", img_l.getvalue(), "Trend_Line.png", use_container_width=True)
+        d_col3.download_button("🖼️ 비교(Bar) 이미지 저장", img_b.getvalue(), "Comparison_Bar.png", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 🧮 3. 계산기 ---
