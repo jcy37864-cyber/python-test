@@ -174,8 +174,41 @@ elif menu == "🧮 계산기":
             if vals: st.info(f"합계: {sum(vals):.2f} / 평균: {sum(vals)/len(vals):.2f}")
         except: st.error("입력 형식을 확인하세요.")
 
-    elif calc == "공차 판정":
-        col1, col2, col3 = st.columns(3)
-        t, tol, v = col1.number_input("기준값"), col2.number_input("공차(±)"), col3.number_input("측정값")
-        if t - tol <= v <= t + tol: st.success("결과: OK")
-        else: st.error("결과: NG")
+   elif calc == "공차 판정":
+        st.info("기준값 대비 상한(+) 공차와 하한(-) 공차를 각각 입력하여 판정합니다.")
+        
+        # 입력 레이아웃 설정
+        col1, col2, col3, col4 = st.columns(4)
+        
+        target = col1.number_input("기준값 (Target)", value=0.0, format="%.4f")
+        upper_tol = col2.number_input("상한공차 (+)", value=0.0, format="%.4f")
+        lower_tol = col3.number_input("하한공차 (-)", value=0.0, format="%.4f")
+        measure = col4.number_input("측정값 (Value)", value=0.0, format="%.4f")
+        
+        # 합격 범위 계산
+        # 하한공차는 보통 양수(0.02)로 입력하므로 '-'를 적용하여 계산
+        min_limit = target - abs(lower_tol)
+        max_limit = target + abs(upper_tol)
+        
+        st.markdown("---")
+        
+        # 판정 결과 출력
+        res_col1, res_col2 = st.columns(2)
+        
+        with res_col1:
+            st.write(f"**규격 범위:** {min_limit:.4f} ~ {max_limit:.4f}")
+            if min_limit <= measure <= max_limit:
+                st.success(f"### 판정 결과: OK ✅")
+            else:
+                st.error(f"### 판정 결과: NG 🚨")
+                
+        with res_col2:
+            # 편차 계산 및 표시
+            if measure > max_limit:
+                diff = measure - max_limit
+                st.warning(f"상한 초과: +{diff:.4f}")
+            elif measure < min_limit:
+                diff = min_limit - measure
+                st.warning(f"하한 미달: -{diff:.4f}")
+            else:
+                st.info("규격 이내 안정적")
