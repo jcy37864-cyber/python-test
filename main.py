@@ -245,9 +245,12 @@ elif menu == "📈 그래프 분석":
 elif menu == "🧮 계산기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("🧮 품질 보조 및 MMC 계산기")
-    tabs = st.tabs(["🎯 MMC 보너스", "⚖️ 공차 판정", "🔧 토크 변환", "📏 단위 변환", "📊 데이터 산포"])
-    
-    with tabs[0]:
+    tabs = st.tabs(["🔧 토크 변환","🎯 MMC 보너스", "⚖️ 공차 판정", "📏 단위 변환", "📊 데이터 산포"])
+     with tabs[0]:
+        v, m = st.number_input("수치", key="tv_v41"), st.selectbox("방향", ["N·m → kgf·m", "kgf·m → N·m"], key="tm_v41")
+        st.success(f"결과: {v * 0.101972 if 'kgf' in m else v * 9.80665:.4f}")
+         
+    with tabs[1]:
         mc1, mc2 = st.columns(2)
         m_type = mc1.radio("종류", ["구멍 (Hole)", "축 (Shaft)"], horizontal=True, key="m_t_v41")
         m_geo = mc2.number_input("도면 기하공차", value=0.05, format="%.4f", key="m_g_v41")
@@ -257,16 +260,14 @@ elif menu == "🧮 계산기":
         bonus = max(0.0, m_act - m_mmc if "구멍" in m_type else m_mmc - m_act)
         mc5.metric("최종 허용치", f"{m_geo + bonus:.4f}", f"+{bonus:.4f}")
 
-    with tabs[1]:
+    with tabs[2]:
         p1, p2, p3, p4 = st.columns(4)
         base, u_t, l_t, ms = p1.number_input("기준", key="cb_v41"), p2.number_input("상한", key="cu_v41"), p3.number_input("하한", key="cl_v41"), p4.number_input("측정", key="cm_v41")
         lo, up = base - abs(l_t), base + abs(u_t)
         if lo <= ms <= up: st.success(f"✅ OK ({lo:.4f} ~ {up:.4f})")
         else: st.error(f"🚨 NG (이탈: {ms-up if ms>up else ms-lo:+.4f})")
 
-    with tabs[2]:
-        v, m = st.number_input("수치", key="tv_v41"), st.selectbox("방향", ["N·m → kgf·m", "kgf·m → N·m"], key="tm_v41")
-        st.success(f"결과: {v * 0.101972 if 'kgf' in m else v * 9.80665:.4f}")
+   
 
     with tabs[3]:
         u_i = st.selectbox("항목", ["mm/inch", "mm/μm", "kg/lb"], key="ui_v41")
