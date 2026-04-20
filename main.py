@@ -33,46 +33,87 @@ def set_global_style():
 # 2. 메뉴별 독립 기능 (함수화)
 # ==========================================
 
+import streamlit as st
+import pandas as pd
 import re
 
 def clean_float(value):
-    """문자열에서 숫자만 추출하여 실수로 변환하는 안전한 함수"""
+    """문자열에서 숫자만 추출하여 실수로 변환"""
     try:
-        # 숫자, 마이너스(-), 소수점(.)만 남기고 나머지 제거 (예: '0.35mm' -> '0.35')
         cleaned = re.sub(r'[^0-9\.\-]', '', str(value))
         return float(cleaned) if cleaned else 0.0
     except:
         return 0.0
 
-# ... (기존 코드 생략) ...
+def run_data_converter():
+    st.header("🔄 성적서 데이터 자동 변환기")
+    st.info("💡 엑셀 성적서에서 'Ref'부터 데이터 끝까지 복사(Ctrl+C)해서 아래에 붙여넣으세요.")
 
-# 4줄씩 한 세트 처리 부분 수정
-for i in range(0, len(lines), 4):
-    try:
-        pin_line = lines[i]
-        mmc_line = lines[i+1]
-        x_line = lines[i+2]
-        y_line = lines[i+3]
-        
-        pin_name = pin_line[0].strip()
-        sample_count = len(pin_line) - 1
-        
-        for s in range(sample_count):
-            # clean_float 함수를 사용하여 안전하게 숫자 변환
-            act_x = clean_float(x_line[s+1])
-            act_y = clean_float(y_line[s+1])
-            
-            processed_results.append({
-                "측정포인트": f"{pin_name}_S{s+1}",
-                "기본공차": 0.35,
-                "도면치수_X": 0.0, 
-                "도면치수_Y": 0.0,
-                "측정치_X": act_x,
-                "측정치_Y": act_y,
-                "실측지름_MMC용": 0.35
-            })
-    except Exception as e:
-        continue
+    # 데이터 입력창
+    raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="Ref    1.nmp    2.nmp ... \nPIN2   0.048    0.074 ...")
+
+    if st.button("🚀 분석 데이터로 변환"):
+        if raw_data:
+            try:
+                # 1. 텍스트 데이터를 행 단위로 나누고, 각 행을 탭이나 공백으로 나누기
+                # lines 변수가 여기서 확실히 정의됩니다.
+                lines = [line.split('\t') for line in raw_data.strip().split('\n')]
+                
+                # 만약 탭으로 안 나눠지면 공백으로 시도
+                if len(lines[0]) <= 1:
+                    lines = [re.split(r'\s{2,}', line.strip()) for line in raw_data.strip().split('\n')]
+
+                processed_results = []
+                
+                # 2. 4줄씩 한 세트(PIN, MMC, X, Y)로 처리
+                for i in range(0, len(lines), 4):
+                    if i + 3 >= len(lines): break  # 남은 줄이 4줄 미만이면 중단
+                    
+                    try:
+                        pin_line = lines[i]    # PIN 이름 라인
+                        mmc_line = lines[i+1]  # MMC공차 라인
+                        x_line = lines[i+2]    # X 측정치 라인
+                        y_line = lines[i+3]    # Y 측정치 라인
+                        
+                        pin_name = pin_line[0].strip()
+                        
+                        # 실제 데이터가 있는 열(샘플들) 개수 파악
+                        sample_count = len(pin_line) - 1
+                        
+                        for s in range(sample_count):
+                            # 데이터가 비어있지 않은지 확인 후 추출
+                            if s + 1 < len(x_line) and s + 1 < len(y_line):
+                                act_x = clean_float(x_line[s+1])
+                                act_y = clean_float(y_line[s+1])
+                                
+                                processed_results.append({
+                                    "측정포인트": f"{pin_name}_S{s+1}",
+                                    "기본공차": 0.35,
+                                    "도면치수_X": 0.0, 
+                                    "도면치수_Y": 0.0,
+                                    "측정치_X": act_x,
+                                    "측정치_Y": act_y,
+                                    "실측지름_MMC용": 0.35
+                                })
+                    except Exception as inner_e:
+                        continue
+
+                if processed_results:
+                    df_result = pd.DataFrame(processed_results)
+                    st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다!")
+                    st.dataframe(df_result)
+                    
+                    # 분석 세션에 자동 저장
+                    st.session_state.data = df_result
+                    st.balloons()
+                    st.info("📊 '멀티 캐비티 분석' 메뉴로 가시면 바로 그래프를 볼 수 있습니다.")
+                else:
+                    st.error("데이터를 분석할 수 없습니다. 형식을 확인해주세요.")
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
+        else:
+            st.warning("내용을 입력해주세요.")
+
 def run_cavity_analysis():
     """메뉴 2: 멀티 캐비티 분석"""
     st.title("📊 핀 높이 멀티 캐비티 통합 분석")
