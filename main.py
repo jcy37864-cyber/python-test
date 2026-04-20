@@ -4,118 +4,130 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from io import BytesIO
 
-# --- 1. 페이지 설정 및 라이브러리 체크 ---
-st.set_page_config(page_title="멀티 캐비티 분석", layout="wide")
+# --- 1. 페이지 설정 ---
+st.set_page_config(page_title="품질 통합 분석 시스템", layout="wide")
 
-# 라이브러리 미설치 대비 기본 엔진 설정
-try:
-    import xlsxwriter
-    engine = 'xlsxwriter'
-except ImportError:
-    engine = None
-
-# --- 2. 스타일 ---
+# 스타일 설정
 st.markdown("""
     <style>
     .stBox { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .guide-box { background-color: #f0f9ff; padding: 15px; border-radius: 10px; border-left: 5px solid #0ea5e9; color: #0c4a6e; margin-bottom: 20px; }
+    .summary-card { 
+        background-color: #ffffff; padding: 15px; border-radius: 10px; border-top: 5px solid #3b82f6;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 10px;
+    }
+    .ng-text { color: #dc2626; font-weight: bold; }
+    .ok-text { color: #10b981; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📈 멀티 캐비티 핀 높이 통합 분석")
+st.title("📊 전 캐비티 통합 분석 보고서")
 
-# --- 3. 템플릿 생성 함수 (에러 방지를 위한 내부 정의) ---
-def get_template():
-    # 이미지 1번과 유사한 54개 포인트 구조
-    points = list(range(1, 55))
-    # 예시 SPEC: 1~6번은 다름, 나머지는 동일 (이미지 참조)
-    spec_min = [30.35 if p <= 6 or 15 <= p <= 20 or p in [36, 37, 53, 54] else 30.03 for p in points]
-    spec_max = [30.70 if p <= 6 or 15 <= p <= 20 or p in [36, 37, 53, 54] else 30.38 for p in points]
-    
-    df_temp = pd.DataFrame({
-        "Point": points,
-        "SPEC_MIN": spec_min,
-        "SPEC_MAX": spec_max,
-        "Cavity_1": [30.5] * 54,
-        "Cavity_2": [30.4] * 54,
-        "Cavity_3": [30.45] * 54,
-        "Cavity_4": [30.55] * 54
-    })
-    output = BytesIO()
-    if engine:
-        with pd.ExcelWriter(output, engine=engine) as writer:
-            df_temp.to_excel(writer, index=False)
-    else:
-        df_temp.to_csv(output, index=False)
-    return output.getvalue()
-
-# --- 4. 파일 업로드 섹션 ---
-st.markdown('<div class="stBox">', unsafe_allow_html=True)
-col1, col2 = st.columns([1, 2])
-with col1:
-    st.download_button("📄 새 템플릿 다운로드", get_template(), "Template.xlsx", use_container_width=True)
-with col2:
-    uploaded_file = st.file_uploader("분석 파일(CSV/XLSX) 업로드", type=["xlsx", "csv"], label_visibility="collapsed")
-st.markdown('</div>', unsafe_allow_html=True)
+# --- 2. 데이터 업로드 및 전처리 ---
+uploaded_file = st.sidebar.file_uploader("분석 파일 업로드", type=["xlsx", "csv"])
 
 if uploaded_file:
-    # 데이터 읽기
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-        
-        # 실측 데이터 컬럼 자동 식별 (Cavity라는 글자가 들어간 열들)
-        cav_cols = [c for c in df.columns if 'Cavity' in c]
-        
-        if not cav_cols:
-            st.error("⚠️ 파일에 'Cavity'로 시작하는 열이 없습니다. 템플릿을 확인해주세요.")
-        else:
-            # --- 5. 통합 비교 그래프 (이미지 2 스타일) ---
-            st.markdown('<div class="stBox">', unsafe_allow_html=True)
-            st.subheader("📊 전 캐비티 통합 경향성 분석")
-            
-            # Y축 범위 계산
-            all_vals = df[cav_cols + ["SPEC_MIN", "SPEC_MAX"]].values.flatten()
-            y_range = [all_vals.min() - 0.1, all_vals.max() + 0.1]
+    df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
+    cav_cols = [c for c in df.columns if 'Cavity' in c]
+    
+    # [데이터 분석 로직]
+    summary_data = []
+    for cav in cav_cols:
+        # 판정 열 생성
+        df[f"{cav}_판정"] = df.apply(lambda x: "OK" if x["SPEC_MIN"] <= x[cav] <= x["SPEC_MAX"] else "NG", axis=1)
+        total = len(df)
+        ng_count = len(df[df[f"{cav}_판정"] == "NG"])
+        ok_count = total - ng_count
+        pass_rate = (ok_count / total) * 100
+        summary_data.append({
+            "cav": cav, "total": total, "ng": ng_count, "ok": ok_count, "rate": pass_rate
+        })
 
-            fig_total = go.Figure()
-            # SPEC 라인 (계단형으로 그려서 이미지 2와 동일하게 구현)
-            fig_total.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MIN"], name="SPEC MIN", line=dict(color="#2563eb", width=2, dash="dash"), mode="lines"))
-            fig_total.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MAX"], name="SPEC MAX", line=dict(color="#dc2626", width=2, dash="dash"), mode="lines"))
-            
-            # 각 캐비티 데이터 중첩
-            for col in cav_cols:
-                fig_total.add_trace(go.Scatter(x=df["Point"], y=df[col], name=col, mode="lines+markers", marker=dict(size=6)))
-            
-            fig_total.update_layout(yaxis_range=y_range, height=600, margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig_total, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+    # --- 3. 통합 경향성 분석 그래프 (개선됨) ---
+    st.markdown('<div class="stBox">', unsafe_allow_html=True)
+    st.subheader("🌐 전 캐비티 데이터 산포 및 NG 구간 분석")
+    
+    fig_total = go.Figure()
+    
+    # [시각적 장치] NG 영역 배경색 칠하기 (상사님이 보시기 편하게)
+    # SPEC 범위를 벗어나는 영역을 배경색으로 강조할 수도 있으나, 여기서는 점의 색상으로 집중
+    
+    # SPEC 라인 (점선 유지)
+    fig_total.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MIN"], name="SPEC 하한", line=dict(color="#2563eb", width=2, dash="dash")))
+    fig_total.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MAX"], name="SPEC 상한", line=dict(color="#dc2626", width=2, dash="dash")))
+    
+    # 각 캐비티 데이터 (선 없애고 점으로만 표시)
+    colors = ['#10b981', '#f59e0b', '#8b5cf6', '#06b6d4']
+    for i, cav in enumerate(cav_cols):
+        # NG 포인트만 별도로 추출하여 강조
+        ng_mask = df[f"{cav}_판정"] == "NG"
+        
+        # 기본 점 (OK 포함)
+        fig_total.add_trace(go.Scatter(
+            x=df["Point"], y=df[cav], 
+            name=f"{cav}",
+            mode='markers', 
+            marker=dict(size=8, opacity=0.6, color=colors[i%4]),
+            hovertemplate="Point: %{x}<br>Value: %{y}<br>Status: OK"
+        ))
+        
+        # NG 지점 강조 (테두리가 있는 빨간 점 중첩)
+        if ng_mask.any():
+            fig_total.add_trace(go.Scatter(
+                x=df.loc[ng_mask, "Point"], y=df.loc[ng_mask, cav],
+                name=f"{cav} [NG]",
+                mode='markers',
+                marker=dict(size=10, color='red', symbol='x', line=dict(width=2, color='white')),
+                showlegend=False,
+                hovertemplate="Point: %{x}<br>Value: %{y}<br>Status: 🚨NG"
+            ))
 
-            # --- 6. 개별 캐비티 상세 분석 (2개씩 배치) ---
-            st.subheader("🔍 캐비티별 개별 판정")
-            grid = st.columns(2)
-            
-            for i, cav in enumerate(cav_cols):
-                with grid[i % 2]:
-                    st.markdown('<div class="stBox">', unsafe_allow_html=True)
-                    st.write(f"**{cav} 분석**")
-                    
-                    # NG 판정 (하나라도 범위 밖이면 빨간색)
-                    df[f"{cav}_판정"] = df.apply(lambda x: "OK" if x["SPEC_MIN"] <= x[cav] <= x["SPEC_MAX"] else "NG", axis=1)
-                    
-                    fig_ind = go.Figure()
-                    fig_ind.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MIN"], line=dict(color="blue", width=1), showlegend=False))
-                    fig_ind.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MAX"], line=dict(color="red", width=1), showlegend=False))
-                    # 측정값 막대 그래프
-                    fig_ind.add_trace(go.Bar(x=df["Point"], y=df[cav], 
-                                             marker_color=['red' if p == "NG" else "#3b82f6" for p in df[f"{cav}_판정"]]))
-                    
-                    fig_ind.update_layout(yaxis_range=y_range, height=350, margin=dict(l=10, r=10, t=30, b=10))
-                    st.plotly_chart(fig_ind, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-    except Exception as e:
-        st.error(f"❌ 에러 발생: {e}")
-        st.info("파일 형식이나 컬럼명(Point, SPEC_MIN, SPEC_MAX, Cavity_1...)이 템플릿과 일치하는지 확인해주세요.")
+    # Y축 범위 최적화
+    all_vals = df[cav_cols + ["SPEC_MIN", "SPEC_MAX"]].values.flatten()
+    fig_total.update_layout(
+        yaxis_range=[all_vals.min() - 0.05, all_vals.max() + 0.05],
+        height=600,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=20, r=20, t=50, b=20),
+        plot_bgcolor='white',
+        xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0')
+    )
+    st.plotly_chart(fig_total, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # --- 4. 요약 내용 (하단 브리핑 섹션) ---
+    st.markdown("### 📋 품질 분석 종합 요약")
+    
+    # 상단 메트릭 카드
+    m_cols = st.columns(len(summary_data))
+    for i, data in enumerate(summary_data):
+        with m_cols[i]:
+            st.markdown(f"""
+                <div class="summary-card">
+                    <h4 style='margin:0;'>{data['cav']}</h4>
+                    <p style='margin:5px 0;'>합격률: <span class="{'ok-text' if data['rate'] == 100 else 'ng-text'}">{data['rate']:.1f}%</span></p>
+                    <p style='margin:0; font-size:0.9em;'>총 {data['total']}개 중 <span class="ng-text">NG {data['ng']}개</span></p>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # 텍스트 상세 브리핑 (기본 코드 스타일 복구)
+    st.markdown('<div class="stBox">', unsafe_allow_html=True)
+    st.subheader("📝 정밀 분석 가이드")
+    
+    total_ng = sum(d['ng'] for d in summary_data)
+    if total_ng == 0:
+        st.success("✅ **모든 캐비티 양호:** 전 포인트 규격 내 관리되고 있어 공정이 매우 안정적입니다.")
+    else:
+        st.warning(f"🚨 **품질 경보:** 총 {total_ng}건의 규격 이탈이 감지되었습니다.")
+        
+        briefing = ""
+        for data in summary_data:
+            if data['ng'] > 0:
+                # 어느 포인트가 NG인지 리스트업
+                ng_points = df[df[f"{data['cav']}_판정"] == "NG"]["Point"].tolist()
+                briefing += f"* **{data['cav']}**: 포인트 {ng_points}번에서 이탈 발생 (불량률 {100-data['rate']:.1f}%)\n"
+        st.markdown(briefing)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+else:
+    st.info("왼쪽 사이드바에서 파일을 업로드해주세요.")
