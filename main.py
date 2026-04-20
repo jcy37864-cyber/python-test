@@ -85,30 +85,51 @@ if st.sidebar.button("🧹 데이터 초기화 (Reset)", use_container_width=Tru
 # =========================
 if menu == "🔄 ZXY 변환":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    st.subheader("🔄 ZXY 데이터 입력 및 변환")
-    if "df_zxy" not in st.session_state:
-        st.session_state.df_zxy = pd.DataFrame({"X": [""] * 100, "Y": [""] * 100, "Z": [""] * 100})
+    st.subheader("🔄 데이터 형식 변환기")
     
-    edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic")
+    # [핵심] 변환 모드 선택 드롭다운
+    convert_mode = st.selectbox(
+        "📝 변환 방식을 선택하세요", 
+        ["ZXY 변환 (표준)", "XYZ 변환", "사용자 정의 변환 (추가 예정)"],
+        index=0
+    )
     
-    if st.button("🚀 ZXY 결과 생성", use_container_width=True):
-        results = []
-        for _, row in edited_df.iterrows():
-            x, y, z = str(row["X"]).strip(), str(row["Y"]).strip(), str(row["Z"]).strip()
-            if x and y and z: results.extend([z, x, y])
-        
-        if results:
-            result_df = pd.DataFrame(results, columns=["변환 결과"])
-            result_df.index = result_df.index + 1
-            st.dataframe(result_df, use_container_width=True, height=400)
-            
-            st.markdown("### 📋 간편 복사 영역")
-            copy_text = "\n".join(map(str, results))
-            st.text_area("드래그하여 전체 복사가 가능합니다.", copy_text, height=150)
-            
-            st.download_button("📂 CSV 다운로드", result_df.to_csv(index=True).encode("utf-8-sig"), "zxy_result.csv")
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("---")
 
+    if convert_mode == "ZXY 변환 (표준)":
+        st.write("📌 **Z → X → Y** 순서로 데이터를 재배열합니다.")
+        
+        # 세션 상태 초기화 (ZXY용)
+        if "df_zxy" not in st.session_state:
+            st.session_state.df_zxy = pd.DataFrame({"X": [""] * 100, "Y": [""] * 100, "Z": [""] * 100})
+        
+        edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic", key="editor_zxy")
+        
+        if st.button("🚀 ZXY 결과 생성", use_container_width=True):
+            results = []
+            for _, row in edited_df.iterrows():
+                x, y, z = str(row["X"]).strip(), str(row["Y"]).strip(), str(row["Z"]).strip()
+                if x and y and z: results.extend([z, x, y]) # Z -> X -> Y 순서
+            
+            if results:
+                result_df = pd.DataFrame(results, columns=["변환 결과"])
+                result_df.index = result_df.index + 1
+                st.success(f"✅ 총 {len(results)}개의 데이터가 변환되었습니다.")
+                st.dataframe(result_df, use_container_width=True, height=300)
+                
+                st.markdown("### 📋 간편 복사 영역")
+                st.text_area("드래그하여 전체 복사가 가능합니다.", "\n".join(map(str, results)), height=150)
+                st.download_button("📂 CSV 다운로드", result_df.to_csv(index=True).encode("utf-8-sig"), "zxy_result.csv")
+
+    elif convert_mode == "XYZ 변환":
+        st.write("📌 **X → Y → Z** 순서로 데이터를 재배열합니다.")
+        # 여기에 XYZ용 로직을 넣으시면 됩니다 (구조는 위와 동일)
+        st.warning("XYZ 변환 로직을 준비 중입니다. (ZXY와 동일한 방식으로 구현 가능)")
+
+    elif convert_mode == "사용자 정의 변환 (추가 예정)":
+        st.info("💡 새로운 변환 규칙이 필요하시면 언제든 추가할 수 있습니다.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
 # =========================
 # 📈 2. 그래프 분석
 # =========================
