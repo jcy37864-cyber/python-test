@@ -135,40 +135,66 @@ elif menu == "📈 그래프 분석":
         avg_v, std_v = df['VALUE'].mean(), df['VALUE'].std()
 
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
+        
+        # 1. 추세 점 그래프 (호버 라벨 확대 적용)
         st.subheader("📈 측정 추세 분석 (Line)")
         fig_p = go.Figure()
-        fig_p.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='측정값'))
+        fig_p.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='측정값',
+                                   hovertemplate='샘플 No: %{x}<br>측정값: %{y:.4f}<extra></extra>'))
         fig_p.add_hline(y=df["MAX"].iloc[0], line_dash="dash", line_color="green", annotation_text="MAX")
         fig_p.add_hline(y=df["MIN"].iloc[0], line_dash="dash", line_color="orange", annotation_text="MIN")
+        
         if not ng_df.empty:
             fig_p.add_trace(go.Scatter(x=ng_df.index, y=ng_df["VALUE"], mode='markers', name='NG', marker=dict(color='red', size=10)))
         if df.loc[worst_idx, "편차"] > 0:
-            fig_p.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', marker=dict(color='rgba(0,0,0,0)', size=20, line=dict(color='red', width=3))))
+            fig_p.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', 
+                                        marker=dict(color='rgba(0,0,0,0)', size=20, line=dict(color='red', width=3))))
+        
+        # [핵심] 호버 라벨 디자인 및 크기 확대
+        fig_p.update_layout(
+            hoverlabel=dict(bgcolor="black", font_size=20, font_color="white", font_family="Malgun Gothic"),
+            hovermode="closest",
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
         st.plotly_chart(fig_p, use_container_width=True)
 
+        # 2. 정밀 막대 그래프 (호버 라벨 확대 적용)
         st.subheader("📊 샘플별 수치 비교 (Bar - 정밀 보기)")
         y_min, y_max = min(df["VALUE"].min(), df["MIN"].min()) * 0.999, max(df["VALUE"].max(), df["MAX"].max()) * 1.001
         colors = ['#FF4B4B' if p == "NG" else '#00B4D8' for p in df["판정"]]
         fig_b = go.Figure()
-        fig_b.add_trace(go.Bar(x=df.index, y=df["VALUE"], marker_color=colors, text=df["VALUE"], textposition='outside'))
+        fig_b.add_trace(go.Bar(x=df.index, y=df["VALUE"], marker_color=colors, text=df["VALUE"], textposition='outside',
+                               hovertemplate='샘플 No: %{x}<br>측정값: %{y:.4f}<extra></extra>'))
         fig_b.add_hline(y=df["MAX"].iloc[0], line_dash="dash", line_color="green")
         fig_b.add_hline(y=df["MIN"].iloc[0], line_dash="dash", line_color="orange")
-        fig_b.update_layout(yaxis_range=[y_min, y_max], yaxis=dict(tickformat=".3f"), showlegend=False)
+        
+        fig_b.update_layout(
+            yaxis_range=[y_min, y_max], 
+            yaxis=dict(tickformat=".3f"),
+            hoverlabel=dict(bgcolor="darkblue", font_size=20, font_color="white", font_family="Malgun Gothic"),
+            showlegend=False
+        )
         st.plotly_chart(fig_b, use_container_width=True)
 
+        # 3. 데이터 분포 히스토그램
         st.subheader("🎯 데이터 분포 분석 (Histogram)")
         fig_h = go.Figure()
-        fig_h.add_trace(go.Histogram(x=df["VALUE"], nbinsx=15, marker_color='#1f77b4', opacity=0.7))
+        fig_h.add_trace(go.Histogram(x=df["VALUE"], nbinsx=15, marker_color='#1f77b4', opacity=0.7,
+                                     hovertemplate='범위: %{x}<br>개수: %{y}<extra></extra>'))
         fig_h.add_vline(x=df["MAX"].iloc[0], line_color="green", line_dash="dash")
         fig_h.add_vline(x=df["MIN"].iloc[0], line_color="orange", line_dash="dash")
-        fig_h.update_layout(xaxis_title="측정값", yaxis_title="빈도수")
+        fig_h.update_layout(
+            xaxis_title="측정값", yaxis_title="빈도수",
+            hoverlabel=dict(bgcolor="gray", font_size=18, font_color="white")
+        )
         st.plotly_chart(fig_h, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+        # [리포트 및 다운로드 섹션]
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
         st.subheader("💾 데이터 저장 및 정밀 분석")
         
-        # 엑셀용 이미지 생성
+        # 엑셀용 이미지 생성 (Matplotlib)
         fig_mpl1, ax1 = plt.subplots(figsize=(10, 4))
         ax1.plot(df.index, df["VALUE"], marker='o', color='#1f77b4', alpha=0.7)
         ax1.axhline(y=df["MAX"].iloc[0], color='green', linestyle='--')
@@ -196,7 +222,7 @@ elif menu == "📈 그래프 분석":
                     worksheet.set_row(i + 1, None, fmt)
                 worksheet.insert_image('H2', 'line.png', {'image_data': img_line, 'x_scale': 0.5, 'y_scale': 0.5})
                 worksheet.insert_image('H22', 'bar.png', {'image_data': img_bar, 'x_scale': 0.5, 'y_scale': 0.5})
-            st.download_button("📂 결과 엑셀 다운로드", excel_buf.getvalue(), "Quality_Report_v4_1.xlsx", use_container_width=True)
+            st.download_button("📂 결과 엑셀 다운로드 (그래프 2종 포함)", excel_buf.getvalue(), "Quality_Report_v4_2.xlsx", use_container_width=True)
         with cd2:
             st.download_button("🖼️ 메인 그래프 이미지 다운로드", img_line.getvalue(), "Trend_Graph.png", use_container_width=True)
         
@@ -212,7 +238,7 @@ elif menu == "📈 그래프 분석":
         with c2: st.metric("평균 (Mean)", f"{avg_v:.4f}", f"σ: {std_v:.4f}")
         with c3: st.metric("Worst Point", f"{worst_val:.4f}" if ng_n > 0 else "N/A", f"Idx: {worst_idx}")
         st.markdown('</div>', unsafe_allow_html=True)
-
+        
 # =========================
 # 🧮 3. 계산기
 # =========================
