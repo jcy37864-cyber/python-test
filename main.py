@@ -442,33 +442,60 @@ def run_position_analysis():
             st.error(f"⚠️ 분석 중 오류 발생: {e}")
             
 def run_quality_calculator():
-    """메뉴 4: 품질 계산기"""
+    """메뉴 4: 품질 계산기 - 함수 내부로 모든 탭을 집어넣었습니다."""
     st.title("🧮 품질 종합 계산기")
-    st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    tabs = st.tabs(["🎯 MMC 보너스", "🔧 일반 단위환산", "⚙️ 토크 변환", "⚖️ 합격 판정"])
     
-    with tabs[0]:
-        base_g = st.number_input("기본 기하공차", value=0.05)
-        mmc_s = st.number_input("MMC 규격", value=10.00)
-        act_s = st.number_input("현재 실측", value=10.02)
-        st.metric("최종 공차", f"{base_g + max(0, act_s - mmc_s):.4f}")
-    with tabs[1]:
-        v = st.number_input("값", value=1.0)
-        m = st.selectbox("종류", ["mm ➔ inch", "inch ➔ mm"])
-        st.success(f"결과: {v/25.4:.4f}" if "inch" in m[:4] else f"결과: {v*25.4:.4f}")
-    with tabs[2]:
-        t_v = st.number_input("토크 값 입력", value=1.0)
-        t_m = st.selectbox("단위", ["N·m ➔ kgf·m", "kgf·m ➔ N·m", "N·m ➔ kgf·cm", "kgf·cm ➔ N·m"])
-        res = t_v * 0.10197 if "kgf·m" in t_m else (t_v * 9.80665 if "N·m" in t_m and "kgf·m" in t_m[:5] else (t_v * 10.197 if "kgf·cm" in t_m else t_v * 0.09806))
-        st.info(f"변환 결과: {res:.4f}")
-    with tabs[3]:
-        spec = st.number_input("기준")
-        u, l = st.number_input("상한"), st.number_input("하한")
-        m_v = st.number_input("측정")
-        if (spec+l) <= m_v <= (spec+u): st.success("✅ 합격")
-        else: st.error("🚨 불합격")
-    st.markdown('</div>', unsafe_allow_html=True)
+    # 박스 스타일 시작
+    st.markdown('<div class="stBox">', unsafe_allow_html=True)
+    
+    # 1. 탭 정의 (함수 안으로 들어옴)
+    tabs = st.tabs(["공차 계산", "단위 변환", "토크 변환", "합불 판정"])
 
+    # --- 탭 0: 기하공차 계산 ---
+    with tabs[0]:
+        st.subheader("📏 기하공차 MMC 계산")
+        base_g = st.number_input("기본 기하공차", value=0.05, key="calc_base_g")
+        mmc_s = st.number_input("MMC 규격", value=10.00, key="calc_mmc_s")
+        act_s = st.number_input("현재 실측", value=10.02, key="calc_act_s")
+        st.metric("최종 허용 공차", f"{base_g + max(0, act_s - mmc_s):.4f}")
+
+    # --- 탭 1: 길이 단위 변환 ---
+    with tabs[1]:
+        st.subheader("🔄 mm / inch 변환")
+        v = st.number_input("값 입력", value=1.0, key="calc_length_v")
+        m = st.selectbox("변환 종류", ["mm ➔ inch", "inch ➔ mm"], key="calc_length_m")
+        if "inch" in m:
+            st.success(f"결과: {v/25.4:.4f} inch")
+        else:
+            st.success(f"결과: {v*25.4:.4f} mm")
+
+    # --- 탭 2: 토크 변환 ---
+    with tabs[2]:
+        st.subheader("🔧 토크 단위 변환")
+        t_v = st.number_input("토크 값 입력", value=1.0, key="calc_torque_v")
+        t_m = st.selectbox("단위 선택", ["N·m ➔ kgf·cm", "kgf·cm ➔ N·m"], key="calc_torque_m")
+
+        if t_m == "N·m ➔ kgf·cm":
+            st.success(f"결과: {t_v * 10.197:.2f} kgf·cm")
+        elif t_m == "kgf·cm ➔ N·m":
+            st.success(f"결과: {t_v / 10.197:.2f} N·m")
+
+    # --- 탭 3: 합불 판정 ---
+    with tabs[3]:
+        st.subheader("✅ 합격/불합격 판정")
+        spec = st.number_input("기준값(Spec)", value=0.0, key="calc_spec_v")
+        u = st.number_input("상한 공차(+)", value=0.1, key="calc_upper_v")
+        l = st.number_input("하한 공차(-)", value=-0.1, key="calc_lower_v")
+        m_v = st.number_input("실제 측정값", value=0.0, key="calc_measure_v")
+        
+        if (spec + l) <= m_v <= (spec + u):
+            st.success(f"결과: {m_v} 👉 ✅ 합격")
+        else:
+            st.error(f"결과: {m_v} 👉 🚨 불합격")
+
+    # 박스 스타일 및 레이아웃 닫기
+    st.markdown('</div>', unsafe_allow_html=True)
+    
 # ==========================================
 # 3. 메인 프로그램 제어 (Main Loop)
 # ==========================================
