@@ -6,7 +6,7 @@ import numpy as np
 from io import BytesIO
 
 # 1. 페이지 설정
-st.set_page_config(page_title="품질 측정 통합 시스템 v4.1", layout="wide")
+st.set_page_config(page_title="품질 측정실 통합 시스템 v4.1", layout="wide")
 
 # 2. 커스텀 CSS (버튼 가시성 보강 및 UI 디자인)
 st.markdown("""
