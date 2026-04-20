@@ -34,19 +34,62 @@ def set_global_style():
 # ==========================================
 
 def run_data_converter():
-    """메뉴 1: 좌표 데이터 변환기"""
-    st.title("🔄 좌표 데이터 변환기")
-    st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    df_input = st.data_editor(pd.DataFrame({"X": [""]*10, "Y": [""]*10, "Z": [""]*10}), num_rows="dynamic", use_container_width=True)
-    if st.button("🚀 데이터 변환 실행"):
-        res = []
-        for _, r in df_input.iterrows():
-            if str(r['X']).strip(): res.extend([r['Z'], r['X'], r['Y']])
-        if res:
-            df_res = pd.DataFrame(res, columns=["변환 데이터 (Z-X-Y)"])
-            st.dataframe(df_res, use_container_width=True)
-            st.download_button("📥 결과 CSV 저장", df_res.to_csv(index=False).encode('utf-8-sig'), "converted_data.csv")
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.header("🔄 성적서 데이터 자동 변환기")
+    st.info("💡 엑셀 성적서에서 'Ref'부터 데이터 끝까지 복사(Ctrl+C)해서 아래에 붙여넣으세요.")
+
+    # 데이터 입력창
+    raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="Ref    1.nmp    2.nmp ... \nPIN2   0.048    0.074 ...")
+
+    if st.button("🚀 분석 데이터로 변환"):
+        if raw_data:
+            try:
+                # 1. 텍스트 데이터를 리스트로 변환
+                lines = [line.split('\t') for line in raw_data.strip().split('\n')]
+                
+                processed_results = []
+                
+                # 2. 4줄씩 한 세트(PIN, MMC, X, Y)로 처리
+                for i in range(0, len(lines), 4):
+                    try:
+                        # 각 줄의 정보 추출
+                        pin_line = lines[i]    # PIN 이름 및 결과
+                        mmc_line = lines[i+1]  # MMC 공차
+                        x_line = lines[i+2]    # X 측정치
+                        y_line = lines[i+3]    # Y 측정치
+                        
+                        pin_name = pin_line[0].strip()
+                        
+                        # 샘플 개수 파악 (첫 줄의 데이터 개수에 따라 결정)
+                        sample_count = len(pin_line) - 1
+                        
+                        for s in range(sample_count):
+                            processed_results.append({
+                                "측정포인트": f"{pin_name}_S{s+1}",
+                                "기본공차": 0.35, # 기본값 설정 (수정 가능)
+                                "도면치수_X": 0.0, # 도면값은 수동 입력 권장
+                                "도면치수_Y": 0.0,
+                                "측정치_X": float(x_line[s+1]),
+                                "측정치_Y": float(y_line[s+1]),
+                                "실측지름_MMC용": 0.35 # 기본값 설정
+                            })
+                    except:
+                        continue # 줄 수가 안 맞는 경우 건너뜀
+
+                if processed_results:
+                    df_result = pd.DataFrame(processed_results)
+                    st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다!")
+                    st.dataframe(df_result)
+                    
+                    # 분석 세션에 자동 저장
+                    st.session_state.data = df_result
+                    st.balloons()
+                    st.info("📊 '멀티 캐비티 분석' 메뉴로 가시면 바로 그래프를 볼 수 있습니다.")
+                else:
+                    st.error("데이터 형식이 맞지 않습니다. 탭(Tab) 구분 형식인지 확인해주세요.")
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
+        else:
+            st.warning("내용을 입력해주세요.")
 
 def run_cavity_analysis():
     """메뉴 2: 멀티 캐비티 분석"""
