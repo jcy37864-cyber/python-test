@@ -4,13 +4,14 @@ import numpy as np
 import plotly.graph_objects as go
 from io import BytesIO
 
-# --- 1. 페이지 설정 및 스타일 ---
-st.set_page_config(page_title="위치도 분석 시스템 v3.3", layout="wide")
+# --- 1. 페이지 설정 및 디자인 ---
+st.set_page_config(page_title="위치도 분석 시스템 v3.4", layout="wide")
 st.markdown("""
     <style>
     .stBox { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
     .guide-blue { color: #2563eb; font-weight: bold; } 
     .guide-purple { color: #9333ea; font-weight: bold; }
+    .guide-red { color: #ef4444; font-weight: bold; }
     .summary-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 2px solid #3b82f6; }
     </style>
 """, unsafe_allow_html=True)
@@ -23,9 +24,9 @@ def reset_app():
     st.session_state.reset_key += 1
     st.rerun()
 
-# --- 3. 핵심 함수 정의 ---
+# --- 3. 함수 정의 ---
 def get_template():
-    # 포인트 번호를 1부터 시작하도록 템플릿 생성
+    # 1번부터 시작하도록 템플릿 생성
     template_df = pd.DataFrame({
         "측정포인트": [i for i in range(1, 9)],
         "기본공차": [0.30] * 8, 
@@ -52,7 +53,7 @@ def create_excel_report(dataframe, plotly_fig):
             worksheet.insert_image('I2', 'graph.png', {'image_data': BytesIO(img_bytes), 'x_scale': 0.6, 'y_scale': 0.6})
     return output_excel.getvalue()
 
-# --- 4. 데이터 입력 및 설정 섹션 ---
+# --- 4. 데이터 입력 및 설정 ---
 with st.expander("📂 데이터 입력 및 설정", expanded=True):
     header_col1, header_col2 = st.columns([5, 1])
     with header_col2:
@@ -69,7 +70,7 @@ with st.expander("📂 데이터 입력 및 설정", expanded=True):
 if file:
     df = pd.read_excel(file)
 else:
-    # 샘플 데이터도 1번부터 시작하도록 설정
+    # 샘플 데이터 (1번부터 시작)
     df = pd.DataFrame({
         "측정포인트": [1, 2, 3, 4, 5, 6, 7, 8],
         "기본공차": [0.30] * 8, 
@@ -92,14 +93,15 @@ df['소진율(%)'] = (df['위치도결과'] / df['최종공차']) * 100
 # 인덱스를 1부터 표시하기 위해 조정
 df.index = np.arange(1, len(df) + 1)
 
-# --- 5. 시각화 가이드 및 그래프 ---
+# --- 5. 시각화 가이드 및 그래프 (NG 경계선 추가) ---
 st.markdown("""
     <div class="stBox">
-        <h4>💡 과녁 범위 읽는 법</h4>
+        <h4>💡 과녁 범위 읽는 법 (v3.4)</h4>
         <ul>
             <li><span class="guide-blue">🔵 파란 점선 원:</span> <b>기본 공차 영역 (ø0.3)</b> - 보너스 없는 순수 규격 범위</li>
             <li><span class="guide-purple">🟣 보라색 실선 영역:</span> <b>최종 합격선 (MMC)</b> - 보너스가 포함되어 확장된 실제 합격 범위</li>
-            <li><span style="color:#ef4444; font-weight:bold;">🔴 빨간색:</span> 규격 이탈(NG) | <span style="color:#10b981; font-weight:bold;">🟢 녹색:</span> 합격(OK)</li>
+            <li><span class="guide-red">🔴 빨간 점선 원:</span> <b>규격 이탈 경계선 (NG)</b> - 이 선을 넘으면 불합격입니다.</li>
+            <li><span style="color:#ef4444; font-weight:bold;">🔴 빨간색 점:</span> NG 포인트 | <span style="color:#10b981; font-weight:bold;">🟢 녹색 점:</span> OK 포인트</li>
         </ul>
     </div>
 """, unsafe_allow_html=True)
@@ -110,10 +112,18 @@ fig.update_xaxes(zeroline=True, zerolinewidth=2.5, zerolinecolor='black', showgr
 fig.update_yaxes(zeroline=True, zerolinewidth=2.5, zerolinecolor='black', showgrid=True, gridcolor='#eee')
 
 # 원 그리기
+# 1. 기본공차 영역 (파란색 점선)
 fig.add_shape(type="circle", x0=-0.15, y0=-0.15, x1=0.15, y1=0.15, line=dict(color="Blue", width=2, dash="dot"))
+
+# 2. 최종 합격 영역 (보라색 채우기)
 max_t = df['최종공차'].max()
 fig.add_shape(type="circle", x0=-max_t/2, y0=-max_t/2, x1=max_t/2, y1=max_t/2, 
              line=dict(color="Purple", width=2.5), fillcolor="rgba(147, 112, 219, 0.1)")
+
+# [신규] 3. NG 경계선 영역 (빨간색 점선)
+# 최종 합격선(보라색)보다 약간 더 넓게 그려서 "여길 넘으면 불량"임을 시각화
+fig.add_shape(type="circle", x0=-(max_t/2 + 0.02), y0=-(max_t/2 + 0.02), x1=(max_t/2 + 0.02), y1=(max_t/2 + 0.02), 
+             line=dict(color="Red", width=1.5, dash="dashdot"))
 
 # 포인트 찍기
 for _, row in df.iterrows():
