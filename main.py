@@ -6,7 +6,7 @@ import numpy as np
 from io import BytesIO
 
 # 1. 페이지 설정
-st.set_page_config(page_title="품질 측정 통합 시스템 v5.0", layout="wide")
+st.set_page_config(page_title="품질 측정 통합 시스템 v5.1", layout="wide")
 
 # 2. 커스텀 CSS
 st.markdown("""
@@ -20,6 +20,10 @@ st.markdown("""
         font-weight: bold !important;
     }
     .stBox { background-color: #ffffff; padding: 24px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-bottom: 24px; }
+    .guide-box { 
+        background-color: #eff6ff; padding: 15px; border-radius: 10px; 
+        border: 1px solid #bfdbfe; color: #1e40af; font-size: 0.95em; margin-bottom: 20px;
+    }
     .summary-box { 
         background-color: #ffffff; padding: 20px; border-radius: 12px; 
         border-left: 6px solid #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
@@ -42,11 +46,19 @@ if st.sidebar.button("🧹 데이터 초기화 (Reset)", use_container_width=Tru
 
 # --- 🔄 1. 데이터 변환기 ---
 if menu == "🔄 데이터 변환기":
+    st.markdown("""
+        <div class="guide-box">
+            <b>💡 사용 가이드:</b> X, Y, Z 좌표 데이터를 입력하면 <b>Z → X → Y</b> 순서로 자동 정렬하여 1열로 변환해줍니다. 
+            측정 장비 데이터를 템플릿에 맞게 복사할 때 사용하세요.
+        </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("🔄 데이터 형식 변환기")
     if "df_zxy" not in st.session_state:
         st.session_state.df_zxy = pd.DataFrame({"X": [""] * 100, "Y": [""] * 100, "Z": [""] * 100})
     edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic")
+    
     if st.button("🚀 ZXY 결과 생성", use_container_width=True):
         results = []
         for _, row in edited_df.iterrows():
@@ -58,12 +70,18 @@ if menu == "🔄 데이터 변환기":
             st.download_button("📂 CSV 다운로드", res_df.to_csv(index=True).encode("utf-8-sig"), "zxy_result.csv")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 📈 2. 그래프 분석 (막대그래프 & 이미지 다운로드 복구) ---
+# --- 📈 2. 그래프 분석 ---
 elif menu == "📈 그래프 분석":
+    st.markdown("""
+        <div class="guide-box">
+            <b>💡 사용 가이드:</b> 엑셀 양식을 다운로드하여 데이터를 입력한 후 업로드하세요. 
+            <b>정밀 Y축 범위</b>가 적용된 추세선과 막대 그래프, 그리고 품질 요약 보고서를 즉시 생성합니다.
+        </div>
+    """, unsafe_allow_html=True)
+
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("📁 분석 파일 업로드")
     
-    # 템플릿 생성
     sample_data = pd.DataFrame({"VALUE": [10.02, 10.15, 9.98, 9.85, 10.03], "MIN": [9.90]*5, "MAX": [10.10]*5})
     template_out = BytesIO()
     with pd.ExcelWriter(template_out, engine='xlsxwriter') as writer: sample_data.to_excel(writer, index=False)
@@ -82,31 +100,28 @@ elif menu == "📈 그래프 분석":
         worst_val = df.loc[worst_idx, "VALUE"]
         ng_df = df[df["판정"] == "NG"]
 
-        # [정밀 Y축 범위] 측정값의 미세한 변화를 극대화
         y_min, y_max = df["VALUE"].min(), df["VALUE"].max()
         margin = (y_max - y_min) * 0.5 if y_max != y_min else 0.1
         y_range = [y_min - margin, y_max + margin]
 
-        # [화면 그래프 1] 추세선 (Line)
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        st.subheader("📈 측정 추세 분석 (Line)")
+        st.subheader("📈 측정 분석 그래프 (Line & Bar)")
+        
+        # Line Chart
         fig_l = go.Figure()
-        fig_l.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='정상', line=dict(color='#3b82f6')))
+        fig_l.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='Data', line=dict(color='#3b82f6')))
         if not ng_df.empty:
             fig_l.add_trace(go.Scatter(x=ng_df.index, y=ng_df["VALUE"], mode='markers', marker=dict(color='red', size=12), name='NG'))
-        fig_l.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', marker=dict(color='rgba(0,0,0,0)', size=20, line=dict(color='red', width=3))))
         fig_l.update_layout(yaxis_range=y_range)
         st.plotly_chart(fig_l, use_container_width=True)
 
-        # [화면 그래프 2] 막대 그래프 (Bar) - 정밀 범위 적용
-        st.subheader("📊 샘플별 수치 비교 (Bar)")
+        # Bar Chart
         fig_b = go.Figure()
         fig_b.add_trace(go.Bar(x=df.index, y=df["VALUE"], marker_color=['red' if p == "NG" else '#3b82f6' for p in df["판정"]]))
         fig_b.update_layout(yaxis_range=y_range)
         st.plotly_chart(fig_b, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # [대시보드 요약]
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
         st.subheader("📊 분석 결과 요약")
         c1, c2, c3, c4 = st.columns(4)
@@ -115,32 +130,26 @@ elif menu == "📈 그래프 분석":
         c3.metric("🚨 불량", f"{len(ng_df)} EA", delta_color="inverse")
         c4.metric("🎯 Worst", f"{worst_val:.4f}", f"Idx: {worst_idx}")
         
-        st.markdown("### 📝 분석 브리핑")
         if len(ng_df) == 0:
-            st.markdown('<div class="summary-box" style="border-left-color: #10b981;"><b>✅ 공정 상태 안정:</b> 모든 데이터가 규격 내에 있습니다.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="summary-box" style="border-left-color: #10b981;"><b>✅ 공정 안정:</b> 이상 수치가 발견되지 않았습니다.</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="summary-box" style="border-left-color: #ef4444;"><b>🚨 품질 경보:</b> {len(ng_df)}건의 이탈 발생. No.{worst_idx} 지점 집중 확인 필요.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="summary-box" style="border-left-color: #ef4444;"><b>🚨 품질 경보:</b> {len(ng_df)}건의 규격 이탈이 감지되었습니다.</div>', unsafe_allow_html=True)
 
-        # [엑셀 및 이미지용 정적 그래프 생성]
-        # 1. Line (숫자 레이블 제거 요청 반영)
+        # 엑셀/이미지용 정적 그래프
         fig_xl, ax_xl = plt.subplots(figsize=(10, 4))
-        ax_xl.plot(df.index, df["VALUE"], marker='o', color='#3b82f6', zorder=1)
-        if not ng_df.empty: ax_xl.scatter(ng_df.index, ng_df["VALUE"], color='red', s=80, zorder=2)
-        ax_xl.scatter(worst_idx, worst_val, facecolors='none', edgecolors='red', s=250, lw=2, zorder=3)
+        ax_xl.plot(df.index, df["VALUE"], marker='o', color='#3b82f6')
+        if not ng_df.empty: ax_xl.scatter(ng_df.index, ng_df["VALUE"], color='red', s=80)
         ax_xl.set_ylim(y_range)
         img_l = BytesIO(); fig_xl.savefig(img_l, format='png', bbox_inches='tight'); plt.close(fig_xl)
 
-        # 2. Bar (막대 그래프 복구 및 정밀 범위)
         fig_xb, ax_xb = plt.subplots(figsize=(10, 4))
         ax_xb.bar(df.index, df["VALUE"], color=['red' if p == "NG" else '#3b82f6' for p in df["판정"]])
         ax_xb.set_ylim(y_range)
         img_b = BytesIO(); fig_xb.savefig(img_b, format='png', bbox_inches='tight'); plt.close(fig_xb)
 
-        # [복구] 이미지 다운로드 버튼 섹션
         st.markdown("### 📥 결과 다운로드")
         d_col1, d_col2, d_col3 = st.columns(3)
         
-        # 엑셀 보고서 (이미지 2개 포함)
         excel_out = BytesIO()
         with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Report')
@@ -152,14 +161,21 @@ elif menu == "📈 그래프 분석":
             worksheet.insert_image('H22', 'bar.png', {'image_data': img_b, 'x_scale': 0.5, 'y_scale': 0.5})
 
         d_col1.download_button("📂 엑셀 보고서 다운로드", excel_out.getvalue(), "Quality_Report.xlsx", use_container_width=True)
-        d_col2.download_button("🖼️ 추세(Line) 이미지 저장", img_l.getvalue(), "Trend_Line.png", use_container_width=True)
-        d_col3.download_button("🖼️ 비교(Bar) 이미지 저장", img_b.getvalue(), "Comparison_Bar.png", use_container_width=True)
+        d_col2.download_button("🖼️ 추세 이미지 저장", img_l.getvalue(), "Trend_Line.png", use_container_width=True)
+        d_col3.download_button("🖼️ 막대 이미지 저장", img_b.getvalue(), "Bar_Chart.png", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 🧮 3. 계산기 ---
 elif menu == "🧮 계산기":
+    st.markdown("""
+        <div class="guide-box">
+            <b>💡 사용 가이드:</b> 품질 현장에서 자주 쓰이는 계산기 모음입니다. 
+            <b>MMC 보너스 공차, 공차 판정, 토크/단위 변환, 기초 통계</b>를 빠르게 계산하세요.
+        </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    st.subheader("🧮 품질 계산기")
+    st.subheader("🧮 품질 계산 도구")
     tabs = st.tabs(["🎯 MMC 보너스", "⚖️ 공차 판정", "🔧 토크 변환", "📏 단위 변환", "📊 데이터 산포"])
     with tabs[0]:
         mc1, mc2 = st.columns(2)
