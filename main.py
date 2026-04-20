@@ -26,7 +26,7 @@ menu = st.sidebar.radio(
 )
 
 # =========================
-# 🔄 ZXY 변환 (기본 세로 쌓기 로직)
+# 🔄 ZXY 변환
 # =========================
 if menu == "🔄 ZXY 변환":
     st.subheader("🔄 ZXY 데이터 변환")
@@ -61,7 +61,7 @@ if menu == "🔄 ZXY 변환":
             st.warning("데이터를 입력해주세요.")
 
 # =========================
-# 📈 그래프 분석 (Worst 정보 하단 이동 및 시인성 개선)
+# 📈 그래프 분석
 # =========================
 elif menu == "📈 그래프 분석":
     st.subheader("📈 품질 그래프 분석")
@@ -98,7 +98,6 @@ elif menu == "📈 그래프 분석":
         ng_points = df[df["판정"] == "NG"]
         ax.scatter(ng_points.index, ng_points["VALUE"], color='red', s=40, zorder=4)
 
-        # 🔥 [개선] 그래프에는 이중 원으로 위치만 강조 (글자 제거)
         if worst_row["편차"] > 0:
             ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', 
                        s=450, linewidths=2.5, zorder=5)
@@ -121,7 +120,6 @@ elif menu == "📈 그래프 분석":
         fig.savefig(img_buffer, format='png', bbox_inches='tight')
         st.download_button("📸 그래프 이미지 저장", img_buffer.getvalue(), "quality_graph.png", "image/png")
 
-        # 🔥 [복구 및 개선] 검사 결과 및 Worst 상세 정보
         st.markdown("---")
         col1, col2 = st.columns(2)
 
@@ -132,7 +130,6 @@ elif menu == "📈 그래프 분석":
             if ng == 0: st.success("✅ 판정: 모든 데이터 규격 만족")
             else: st.error(f"🚨 판정: 규격 이탈 발생 (NG {ng}건)")
 
-            # 평균 경향 분석
             avg_val = df["VALUE"].mean()
             if avg_val > df["MAX"].mean(): st.error("📉 경향: 전체적으로 상한값 초과 추세")
             elif avg_val < df["MIN"].mean(): st.error("📈 경향: 전체적으로 하한값 미달 추세")
@@ -148,7 +145,6 @@ elif menu == "📈 그래프 분석":
             else:
                 st.info("Worst 포인트가 없습니다. (전체 양호)")
 
-        # 결과 엑셀 다운로드
         excel_out = BytesIO()
         with pd.ExcelWriter(excel_out, engine='openpyxl') as writer:
             df.to_excel(writer, index=False)
@@ -174,10 +170,9 @@ elif menu == "🧮 계산기":
             if vals: st.info(f"합계: {sum(vals):.2f} / 평균: {sum(vals)/len(vals):.2f}")
         except: st.error("입력 형식을 확인하세요.")
 
-   elif calc == "공차 판정":
+    elif calc == "공차 판정":
         st.info("기준값 대비 상한(+) 공차와 하한(-) 공차를 각각 입력하여 판정합니다.")
         
-        # 입력 레이아웃 설정
         col1, col2, col3, col4 = st.columns(4)
         
         target = col1.number_input("기준값 (Target)", value=0.0, format="%.4f")
@@ -185,14 +180,12 @@ elif menu == "🧮 계산기":
         lower_tol = col3.number_input("하한공차 (-)", value=0.0, format="%.4f")
         measure = col4.number_input("측정값 (Value)", value=0.0, format="%.4f")
         
-        # 합격 범위 계산
-        # 하한공차는 보통 양수(0.02)로 입력하므로 '-'를 적용하여 계산
+        # 합격 범위 계산 (하한은 절댓값을 빼고, 상한은 절댓값을 더함)
         min_limit = target - abs(lower_tol)
         max_limit = target + abs(upper_tol)
         
         st.markdown("---")
         
-        # 판정 결과 출력
         res_col1, res_col2 = st.columns(2)
         
         with res_col1:
@@ -203,7 +196,6 @@ elif menu == "🧮 계산기":
                 st.error(f"### 판정 결과: NG 🚨")
                 
         with res_col2:
-            # 편차 계산 및 표시
             if measure > max_limit:
                 diff = measure - max_limit
                 st.warning(f"상한 초과: +{diff:.4f}")
