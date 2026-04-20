@@ -64,48 +64,48 @@ def run_data_converter():
 
                 processed_results = []
                 
-                # 2. 4줄씩 한 세트(PIN, MMC, X, Y)로 처리
+               # run_data_converter 함수 내부의 데이터 처리 루프를 아래로 교체해 주세요.
+
                 for i in range(0, len(lines), 4):
                     if i + 3 >= len(lines): break 
                     
                     try:
-                        pin_line = lines[i]    # PIN 이름 및 도면치수 포함 라인
-                        x_line = lines[i+2]    # X 측정치 라인
-                        y_line = lines[i+3]    # Y 측정치 라인
+                        pin_line = lines[i]
+                        x_line = lines[i+2]
+                        y_line = lines[i+3]
                         
-                        pin_name = pin_line[0].strip()
-                        
-                        # 도면치수 추출 로직 강화
-                        # x_line에서 숫자가 들어있는 첫 번째 혹은 두 번째 요소를 탐색
-                        try:
-                            # 만약 Nominal까지 긁었다면 0번 인덱스에 있을 것이고, 
-                            # Ref부터 긁었다면 0번은 'X'라는 글자일 확률이 높음
-                            val_x = [clean_float(v) for v in x_line if re.search(r'\d', str(v))]
-                            val_y = [clean_float(v) for v in y_line if re.search(r'\d', str(v))]
-                            
-                            # 줄에서 가장 앞쪽에 있는 숫자를 도면치수로 간주 (수정 포인트)
-                            nom_x = val_x[0] if val_x else 0.0
-                            nom_y = val_y[0] if val_y else 0.0
-                        except:
-                            nom_x, nom_y = 0.0, 0.0
+                        # 1. 도면치수(Nominal)는 줄의 맨 앞(0번 혹은 1번)에서 찾음
+                        nom_x = clean_float(x_line[0]) if len(x_line) > 0 else 0.0
+                        nom_y = clean_float(y_line[0]) if len(y_line) > 0 else 0.0
 
-                        sample_count = len(pin_line) - 1
+                        # 2. 진짜 데이터는 보통 줄의 뒤쪽(Ref 이후)에 있음
+                        # 성적서 양식상 'Ref'(PIN이름)가 위치한 인덱스를 찾아 그 이후 데이터만 추출
+                        # 만약 Ref 위치를 찾기 어려우면, 뒤에서부터 4개를 가져오는 방식이 가장 안전합니다.
+                        
+                        sample_count = 4  # 우리는 무조건 4개의 샘플(1.nmp ~ 4.nmp)만 필요함
                         
                         for s in range(sample_count):
-                            if s + 1 < len(x_line) and s + 1 < len(y_line):
-                                act_x = clean_float(x_line[s+1])
-                                act_y = clean_float(y_line[s+1])
-                                act_dia = clean_float(lines[i+1][s+1]) if s+1 < len(lines[i+1]) else 0.35
-                                
-                                processed_results.append({
-                                    "측정포인트": f"{pin_name}_S{s+1}",
-                                    "기본공차": 0.35,
-                                    "도면치수_X": nom_x,
-                                    "도면치수_Y": nom_y,
-                                    "측정치_X": act_x,
-                                    "측정치_Y": act_y,
-                                    "실측지름_MMC용": act_dia
-                                })
+                            # 뒤에서부터 4, 3, 2, 1번째 데이터를 가져옵니다 (오른쪽 정렬 기준)
+                            idx = -(sample_count - s) 
+                            
+                            act_x = clean_float(x_line[idx])
+                            act_y = clean_float(y_line[idx])
+                            # MMC 지름도 뒤에서 해당 순서 데이터를 가져옴
+                            act_dia = clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
+                            
+                            # 포인트 이름 추출 (PIN2, PIN3 등)
+                            # 보통 데이터 앞 혹은 중간에 문자열로 존재
+                            pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), "Unknown")
+
+                            processed_results.append({
+                                "측정포인트": f"{pin_name}_S{s+1}",
+                                "기본공차": 0.35,
+                                "도면치수_X": nom_x,
+                                "도면치수_Y": nom_y,
+                                "측정치_X": act_x,
+                                "측정치_Y": act_y,
+                                "실측지름_MMC용": act_dia
+                            })
                     except Exception as inner_e:
                         continue
 
