@@ -6,28 +6,22 @@ import numpy as np
 from io import BytesIO
 
 # 1. 페이지 설정
-st.set_page_config(page_title="품질 측정 통합 시스템 v4.6", layout="wide")
+st.set_page_config(page_title="품질 측정 통합 시스템 v4.8", layout="wide")
 
-# 2. 커스텀 CSS (누락된 스타일 및 버튼 색상 복구)
+# 2. 커스텀 CSS (사이드바 버튼 색상 및 박스 디자인)
 st.markdown("""
     <style>
     .main { background-color: #f4f7f9; }
-    /* 사이드바 스타일 */
-    [data-testid="stSidebar"] { background-color: #1e293b !important; border-right: 1px solid #e2e8f0; }
+    [data-testid="stSidebar"] { background-color: #1e293b !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    
-    /* [복구] 초기화 버튼 빨간색 강제 지정 */
+    /* 초기화 버튼 빨간색 강제 고정 */
     [data-testid="stSidebar"] div.stButton > button {
         background-color: #ef4444 !important;
         color: white !important;
         border: none !important;
         font-weight: bold !important;
     }
-
     .stBox { background-color: #ffffff; padding: 24px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-bottom: 24px; }
-    div[data-testid="stMetric"] { background-color: #ffffff; border: 1px solid #e2e8f0; padding: 15px 20px; border-radius: 12px; }
-    
-    /* 요약 브리핑 박스 스타일 */
     .summary-box { 
         background-color: #ffffff; padding: 20px; border-radius: 12px; 
         border-left: 6px solid #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
@@ -40,7 +34,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 st.title("📊 품질 측정 통합 시스템")
 
-# 사이드바 메뉴
+# 사이드바
 st.sidebar.title("🚀 주요 기능")
 menu = st.sidebar.radio("📋 메뉴 선택", ["🔄 데이터 변환기", "📈 그래프 분석", "🧮 계산기"])
 
@@ -48,16 +42,14 @@ if st.sidebar.button("🧹 데이터 초기화 (Reset)", use_container_width=Tru
     for key in st.session_state.keys(): del st.session_state[key]
     st.rerun()
 
-# --- 🔄 1. 데이터 변환기 (CSV 다운로드 버튼 복구) ---
+# --- 🔄 1. 데이터 변환기 ---
 if menu == "🔄 데이터 변환기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     st.subheader("🔄 데이터 형식 변환기")
-    
-    # 템플릿 유지용 세션 상태
     if "df_zxy" not in st.session_state:
         st.session_state.df_zxy = pd.DataFrame({"X": [""] * 100, "Y": [""] * 100, "Z": [""] * 100})
     
-    edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic", key="editor_v46")
+    edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic", key="editor_v48")
     
     if st.button("🚀 ZXY 결과 생성", use_container_width=True):
         results = []
@@ -70,23 +62,36 @@ if menu == "🔄 데이터 변환기":
             res_df.index += 1
             st.success(f"✅ {len(results)}개 변환 완료")
             st.dataframe(res_df, use_container_width=True)
-            
-            # [복구] CSV 다운로드 및 복사 영역
-            st.markdown("### 📋 결과 출력")
-            st.text_area("드래그 복사용", "\n".join(map(str, results)), height=150)
-            st.download_button(
-                label="📂 변환 결과 CSV 다운로드",
-                data=res_df.to_csv(index=True).encode("utf-8-sig"),
-                file_name="zxy_conversion_result.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            st.download_button("📂 결과 CSV 다운로드", res_df.to_csv(index=True).encode("utf-8-sig"), "zxy_result.csv", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 📈 2. 그래프 분석 (요약/그래프 2종/Worst 강조 복구) ---
+# --- 📈 2. 그래프 분석 (양식 다운로드 버튼 복구) ---
 elif menu == "📈 그래프 분석":
+    # [복구] 엑셀 업로드 전 템플릿 다운로드 섹션
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("파일 업로드 (XLSX, CSV)", type=["xlsx", "csv"])
+    st.subheader("📁 분석 파일 업로드")
+    
+    # 샘플 템플릿 생성 로직
+    sample_data = pd.DataFrame({
+        "VALUE": [10.02, 10.05, 9.98, 10.12, 10.03],
+        "MIN": [9.90, 9.90, 9.90, 9.90, 9.90],
+        "MAX": [10.10, 10.10, 10.10, 10.10, 10.10]
+    })
+    template_out = BytesIO()
+    with pd.ExcelWriter(template_out, engine='xlsxwriter') as writer:
+        sample_data.to_excel(writer, index=False, sheet_name='Sheet1')
+    
+    t_col1, t_col2 = st.columns([1, 2])
+    with t_col1:
+        st.download_button(
+            label="📄 업로드 양식(Template) 다운로드",
+            data=template_out.getvalue(),
+            file_name="Quality_Upload_Template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with t_col2:
+        uploaded_file = st.file_uploader("분석할 XLSX 또는 CSV 파일을 선택하세요", type=["xlsx", "csv"], label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
 
     if uploaded_file:
@@ -99,74 +104,75 @@ elif menu == "📈 그래프 분석":
         ng_df = df[df["판정"] == "NG"]
         avg_v = df['VALUE'].mean()
 
-        # 화면용 그래프
+        # [정밀 Y축 범위 설정]
+        y_min_limit = min(df["VALUE"].min(), df["MIN"].min())
+        y_max_limit = max(df["VALUE"].max(), df["MAX"].max())
+        y_margin = (y_max_limit - y_min_limit) * 0.3 if y_max_limit != y_min_limit else 0.05
+        y_range = [y_min_limit - y_margin, y_max_limit + y_margin]
+
+        # 화면용 그래프 2종
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        st.subheader("📈 실시간 측정 추세")
-        fig_p = go.Figure()
-        fig_p.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='정상', line=dict(color='#3b82f6')))
-        if not ng_df.empty: 
-            fig_p.add_trace(go.Scatter(x=ng_df.index, y=ng_df["VALUE"], mode='markers', name='NG', marker=dict(color='red', size=12)))
-        # [복구] Worst 포인트 강조
-        fig_p.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', 
-                                    marker=dict(color='rgba(0,0,0,0)', size=20, line=dict(color='red', width=3))))
-        st.plotly_chart(fig_p, use_container_width=True)
+        st.subheader("📈 측정 분석 그래프")
+        
+        # 1. Line Chart
+        fig_l_ui = go.Figure()
+        fig_l_ui.add_trace(go.Scatter(x=df.index, y=df["VALUE"], mode='lines+markers', name='Data', line=dict(color='#3b82f6')))
+        fig_l_ui.add_trace(go.Scatter(x=[worst_idx], y=[worst_val], mode='markers', name='Worst', marker=dict(color='rgba(0,0,0,0)', size=18, line=dict(color='red', width=3))))
+        fig_l_ui.update_layout(yaxis_range=y_range, title="측정 추세 (Trend)")
+        st.plotly_chart(fig_l_ui, use_container_width=True)
+
+        # 2. Bar Chart (정밀 범위 적용)
+        fig_b_ui = go.Figure()
+        fig_b_ui.add_trace(go.Bar(x=df.index, y=df["VALUE"], marker_color=['red' if p=="NG" else '#3b82f6' for p in df["판정"]]))
+        fig_b_ui.update_layout(yaxis_range=y_range, title="샘플별 수치 비교 (Bar)")
+        st.plotly_chart(fig_b_ui, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # [복구] 품질 분석 대시보드 및 요약
+        # 품질 분석 대시보드
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        st.subheader("📊 품질 분석 대시보드")
+        st.subheader("📊 품질 분석 요약")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("📦 전체 샘플", f"{len(df)} EA")
-        c2.metric("✅ 합격 (OK)", f"{len(df)-len(ng_df)} EA", delta=f"{((len(df)-len(ng_df))/len(df))*100:.1f}%")
-        c3.metric("🚨 불량 (NG)", f"{len(ng_df)} EA", delta=f"-{len(ng_df)}", delta_color="inverse")
-        c4.metric("🎯 Worst", f"{worst_val:.3f}", f"Idx: {worst_idx}")
+        c1.metric("📦 샘플 수", f"{len(df)} EA")
+        c2.metric("✅ 합격", f"{len(df)-len(ng_df)} EA")
+        c3.metric("🚨 불량", f"{len(ng_df)} EA", delta_color="inverse")
+        c4.metric("🎯 Worst", f"{worst_val:.4f}", f"Idx: {worst_idx}")
 
-        # [복구] 요약 내용 브리핑
-        st.markdown("### 📝 분석 요약 브리핑")
+        st.markdown("### 📝 분석 브리핑")
         if len(ng_df) == 0:
-            st.markdown(f'<div class="summary-box" style="border-left-color: #10b981;"><b>✅ 공정 안정:</b> 모든 데이터가 규격 내에 있으며, 평균은 {avg_v:.4f}입니다.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="summary-box" style="border-left-color: #10b981;"><b>✅ 공정 안정:</b> 모든 수치가 규격 내에 관리되고 있습니다. (평균: {avg_v:.4f})</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="summary-box" style="border-left-color: #ef4444;"><b>🚨 품질 경보:</b> {len(ng_df)}건의 불량이 발견되었습니다. <b>No.{worst_idx} ({worst_val:.4f})</b> 지점의 집중 점검이 필요합니다.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="summary-box" style="border-left-color: #ef4444;"><b>🚨 품질 경보:</b> {len(ng_df)}건의 규격 이탈이 발생했습니다. <b>No.{worst_idx}</b> 지점 확인 요망.</div>', unsafe_allow_html=True)
 
-        # --- [복구] 엑셀용 그래프 2종 (Line + Bar) ---
-        fig_l, ax_l = plt.subplots(figsize=(10, 4))
-        ax_l.plot(df.index, df["VALUE"], marker='o', color='#3b82f6', zorder=1)
-        ax_l.axhline(y=df["MAX"].iloc[0], color='green', ls='--')
-        ax_l.axhline(y=df["MIN"].iloc[0], color='orange', ls='--')
-        if not ng_df.empty: ax_l.scatter(ng_df.index, ng_df["VALUE"], color='red', s=60, zorder=5)
-        ax_l.scatter(worst_idx, worst_val, facecolors='none', edgecolors='red', s=250, lw=2, zorder=6) # Worst 원 강조
-        img_l = BytesIO(); fig_l.savefig(img_l, format='png', bbox_inches='tight'); plt.close(fig_l)
+        # 엑셀용 정적 그래프 생성
+        fig_xl, ax_xl = plt.subplots(figsize=(10, 4))
+        ax_xl.plot(df.index, df["VALUE"], marker='o', color='#3b82f6')
+        ax_xl.scatter(worst_idx, worst_val, facecolors='none', edgecolors='red', s=250, lw=2)
+        ax_xl.set_ylim(y_range)
+        img_l = BytesIO(); fig_xl.savefig(img_l, format='png', bbox_inches='tight'); plt.close(fig_xl)
 
-        fig_b, ax_b = plt.subplots(figsize=(10, 4))
-        ax_b.bar(df.index, df["VALUE"], color=['red' if p == "NG" else '#3b82f6' for p in df["판정"]])
-        ax_b.axhline(y=df["MAX"].iloc[0], color='green', ls='--')
-        ax_b.axhline(y=df["MIN"].iloc[0], color='orange', ls='--')
-        img_b = BytesIO(); fig_b.savefig(img_b, format='png', bbox_inches='tight'); plt.close(fig_b)
+        fig_xb, ax_xb = plt.subplots(figsize=(10, 4))
+        ax_xb.bar(df.index, df["VALUE"], color=['red' if p=="NG" else '#3b82f6' for p in df["판정"]])
+        ax_xb.set_ylim(y_range)
+        img_b = BytesIO(); fig_xb.savefig(img_b, format='png', bbox_inches='tight'); plt.close(fig_xb)
 
-        # 엑셀 저장
+        # 최종 엑셀 저장
         excel_out = BytesIO()
         with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Report')
             workbook, worksheet = writer.book, writer.sheets['Report']
             red_fmt = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
-            num_fmt = workbook.add_format({'num_format': '0.0000'})
             for i in range(len(df)):
-                fmt = red_fmt if df.iloc[i]["판정"] == "NG" else num_fmt
-                worksheet.set_row(i + 1, None, fmt)
-            # [복구] 그래프 2개 입력
+                if df.iloc[i]["판정"] == "NG": worksheet.set_row(i + 1, None, red_fmt)
             worksheet.insert_image('H2', 'line.png', {'image_data': img_l, 'x_scale': 0.5, 'y_scale': 0.5})
             worksheet.insert_image('H22', 'bar.png', {'image_data': img_b, 'x_scale': 0.5, 'y_scale': 0.5})
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        dc1, dc2 = st.columns(2)
-        dc1.download_button("📂 엑셀 보고서 다운로드 (그래프 2종)", excel_out.getvalue(), "Quality_Report_v46.xlsx", use_container_width=True)
-        dc2.download_button("🖼️ 추세 그래프 이미지 저장", img_l.getvalue(), "Trend_Line.png", use_container_width=True)
+        st.download_button("📂 엑셀 보고서 다운로드 (그래프 2종 포함)", excel_out.getvalue(), "Quality_Report_Final.xlsx", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 🧮 3. 계산기 (전체 기능 유지) ---
+# --- 🧮 3. 계산기 (코드 유지) ---
 elif menu == "🧮 계산기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    st.subheader("🧮 품질 계산 도구")
+    st.subheader("🧮 품질 계산기")
     tabs = st.tabs(["🎯 MMC 보너스", "⚖️ 공차 판정", "🔧 토크 변환", "📏 단위 변환", "📊 데이터 산포"])
     with tabs[0]:
         mc1, mc2 = st.columns(2)
