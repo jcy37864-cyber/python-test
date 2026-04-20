@@ -359,6 +359,36 @@ def run_position_analysis():
             ax.set_ylim(-limit, limit)
             
             st.pyplot(fig)
+            # --- [추가] 분석 결과 요약 가이드 ---
+            st.divider()
+            st.subheader("💡 데이터 분석 가이드 (AI Summary)")
+            
+            # 통계 데이터 계산
+            total_count = len(df_m)
+            ok_count = (df_m['판정'].str.contains('OK')).sum()
+            ng_count = total_count - ok_count
+            ok_rate = (ok_count / total_count) * 100
+
+            # X, Y 편차 평균 (밀림 방향 파악)
+            avg_dev_x = dev_x.mean()
+            avg_dev_y = dev_y.mean()
+
+            # 요약 리포트 출력
+            col1, col2, col3 = st.columns(3)
+            col1.metric("전체 샘플 수", f"{total_count}개")
+            col2.metric("합격률", f"{ok_rate:.1f}%", delta=f"-{ng_count} NG" if ng_count > 0 else "All Pass")
+            
+            # 밀림 방향 진단
+            direction_x = "오른쪽(+)" if avg_dev_x > 0 else "왼쪽(-)"
+            direction_y = "위쪽(+)" if avg_dev_y > 0 else "아래쪽(-)"
+            
+            advice = f"""
+            * **종합 판정:** 현재 합격률은 **{ok_rate:.1f}%**입니다.
+            * **경향성 분석:** 데이터가 전체적으로 **{direction_x}**으로 `{abs(avg_dev_x):.3f}mm`, **{direction_y}**으로 `{abs(avg_dev_y):.3f}mm` 밀려 있습니다.
+            * **조치 권고:** 1. 그래프 상의 빨간 점들이 선형을 이루고 있다면 **장비 보정(Offset)**을 우선 확인하세요.
+                2. 특정 포인트에서만 NG가 난다면 해당 위치의 **공구 마모나 지그 고정** 상태를 점검해야 합니다.
+            """
+            st.info(advice) 
             
             # 통계 출력
             ok_count = (df_m['판정'] == "✅ OK").sum()
