@@ -67,37 +67,47 @@ def run_data_converter():
                 
                 # 2. 4줄씩 한 세트(PIN, MMC, X, Y)로 처리
                 for i in range(0, len(lines), 4):
-                    if i + 3 >= len(lines): break  # 남은 줄이 4줄 미만이면 중단
+                    if i + 3 >= len(lines): break 
                     
                     try:
-                        pin_line = lines[i]    # PIN 이름 라인
-                        mmc_line = lines[i+1]  # MMC공차 라인
+                        pin_line = lines[i]    # PIN 이름 및 도면치수 포함 라인
+                        # mmc_line = lines[i+1] # MMC공차 라인 (현재는 사용 안 함)
                         x_line = lines[i+2]    # X 측정치 라인
                         y_line = lines[i+3]    # Y 측정치 라인
                         
+                        # 도면치수(Nominal) 추출: 성적서 양식상 pin_line의 앞쪽 어딘가에 있음
+                        # 텍스트 복사 방식에 따라 인덱스가 달라질 수 있으므로 안전하게 추출
                         pin_name = pin_line[0].strip()
                         
-                        # 실제 데이터가 있는 열(샘플들) 개수 파악
+                        # 보통 Nominal 값은 리스트의 특정 위치에 있거나 re로 찾아야 함
+                        # 사용자님 성적서 기준: Nominal X는 pin_line 근처, Nominal Y는 그 아래줄 근처
+                        try:
+                            # x_line과 y_line의 첫 번째 항목이 보통 도면치수인 경우가 많음 (복사 시)
+                            nom_x = clean_float(x_line[0])
+                            nom_y = clean_float(y_line[0])
+                        except:
+                            nom_x, nom_y = 0.0, 0.0
+
                         sample_count = len(pin_line) - 1
                         
                         for s in range(sample_count):
-                            # 데이터가 비어있지 않은지 확인 후 추출
                             if s + 1 < len(x_line) and s + 1 < len(y_line):
                                 act_x = clean_float(x_line[s+1])
                                 act_y = clean_float(y_line[s+1])
+                                # 실측지름(MMC공차 라인)도 샘플별로 가져오기
+                                act_dia = clean_float(lines[i+1][s+1]) if s+1 < len(lines[i+1]) else 0.35
                                 
                                 processed_results.append({
                                     "측정포인트": f"{pin_name}_S{s+1}",
                                     "기본공차": 0.35,
-                                    "도면치수_X": 0.0, 
-                                    "도면치수_Y": 0.0,
+                                    "도면치수_X": nom_x,  # 이제 0이 아니라 추출된 값 입력
+                                    "도면치수_Y": nom_y,  # 이제 0이 아니라 추출된 값 입력
                                     "측정치_X": act_x,
                                     "측정치_Y": act_y,
-                                    "실측지름_MMC용": 0.35
+                                    "실측지름_MMC용": act_dia
                                 })
                     except Exception as inner_e:
                         continue
-
                 if processed_results:
                     df_result = pd.DataFrame(processed_results)
                     st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다!")
