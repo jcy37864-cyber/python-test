@@ -108,22 +108,30 @@ def run_data_converter():
                     except Exception as inner_e:
                         continue # 한 블록 에러나도 다음으로 진행
 
-                # 3. 결과 출력
+               # 3. 결과 출력
                 if processed_results:
                     df_result = pd.DataFrame(processed_results)
-                    st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다! (캐비티 수: {sample_count}개)")
-                    st.dataframe(df_result)
                     
+                    # 사용자가 보기 편하게 인덱스를 0이 아닌 1부터 시작하도록 수정
+                    df_result.index = df_result.index + 1
+                    
+                    st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다! (캐비티 수: {sample_count}개)")
+                    
+                    # 표 출력 (인덱스가 1, 2, 3... 순으로 보입니다)
+                    st.dataframe(df_result, use_container_width=True)
+                    
+                    # 분석 세션에 데이터 저장 (인덱스 보정된 상태 그대로 저장됨)
                     st.session_state.data = df_result
+                    
                     st.balloons()
                     st.info("🎯 변환 완료! 이제 상단의 **'📊 Step 2. 위치도 결과 분석'** 탭을 클릭하세요.")
                 else:
-                    st.error("데이터를 분석할 수 없습니다. 형식을 확인해주세요.")
+                    st.error("데이터를 분석할 수 없습니다. 성적서 형식을 다시 확인해주세요.")
 
             except Exception as e:
-                st.error(f"오류 발생: {e}")
+                st.error(f"⚠️ 변환 중 오류가 발생했습니다: {e}")
         else:
-            st.warning("내용을 입력해주세요.")
+            st.warning("내용을 입력해주세요. (Nominal 열부터 끝까지 복사)")
 
 def run_xyz_transformer():
     """메뉴 1: XYZ 좌표 데이터 변환기 """
