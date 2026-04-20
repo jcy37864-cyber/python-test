@@ -157,22 +157,88 @@ elif menu == "📈 그래프 분석":
 # =========================
 elif menu == "🧮 계산기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    st.subheader("🧮 품질 보조 계산기")
-    tabs = st.tabs(["🔧 토크", "📏 기초 단위", "📊 합계/평균", "⚖️ 공차"])
+    st.subheader("🧮 품질 보조 및 MMC 정밀 계산기")
+    
+    # 탭 구성 (MMC 계산기 추가)
+    tabs = st.tabs(["🎯 MMC 보너스 공차", "⚖️ 공차 정밀 판정", "🔧 토크 변환", "📏 단위 변환", "📊 데이터 산포"])
+    
+    # 1. MMC 보너스 공차 계산기 (신규 추가)
     with tabs[0]:
-        v = st.number_input("수치", value=0.0, format="%.4f", key="t_v")
-        m = st.selectbox("방향", ["N·m → kgf·m", "kgf·m → N·m"], key="t_m")
-        st.success(f"결과: {v * 0.101972 if 'kgf' in m else v * 9.80665:.4f}")
+        st.write("### 🎯 MMC(최대 실체 조건) 및 보너스 공차 계산")
+        st.caption("가공 치수가 MMC에서 벗어난 만큼 기하 공차에 보너스가 가산됩니다.")
+        
+        mc1, mc2 = st.columns(2)
+        m_type = mc1.radio("항목 종류", ["구멍 (Internal/Hole)", "축 (External/Shaft)"], horizontal=True, key="mmc_type")
+        m_geo_tol = mc2.number_input("도면 기하공차 (위치도/직도 등)", value=0.05, format="%.4f", key="mmc_geo")
+        
+        mc3, mc4, mc5 = st.columns(3)
+        if m_type == "구멍 (Internal/Hole)":
+            m_mmc = mc3.number_input("MMC 치수 (규격 최소값)", value=10.00, format="%.4f", key="mmc_val_h")
+            m_act = mc4.number_input("실제 측정 치수", value=10.02, format="%.4f", key="mmc_act_h")
+            bonus = max(0.0, m_act - m_mmc)
+        else:
+            m_mmc = mc3.number_input("MMC 치수 (규격 최대값)", value=10.00, format="%.4f", key="mmc_val_s")
+            m_act = mc4.number_input("실제 측정 치수", value=9.98, format="%.4f", key="mmc_act_s")
+            bonus = max(0.0, m_mmc - m_act)
+            
+        total_tol = m_geo_tol + bonus
+        mc5.metric("최종 허용 공차", f"{total_tol:.4f}", f"Bonus: +{bonus:.4f}")
+        
+        st.info(f"**해설:** 실제 치수가 MMC에서 {bonus:.4f}만큼 벗어났으므로, 기하 공차는 기존 {m_geo_tol:.4f}에서 **{total_tol:.4f}**까지 허용됩니다.")
+
+    # 2. 공차 정밀 판정 (로직 보강)
     with tabs[1]:
-        u_val = st.number_input("수치", value=0.0, format="%.4f", key="u_v")
-        u_m = st.selectbox("항목", ["mm ↔ inch", "kg ↔ lb", "MPa ↔ psi/bar"], key="u_m")
-        st.info("단위 변환 로직 적용됨")
+        st.write("### ⚖️ 상하한 공차 정밀 판정")
+        p1, p2, p3, p4 = st.columns(4)
+        base = p1.number_input("기준치", value=0.0, format="%.4f", key="p_base")
+        u_tol = p2.number_input("상한(+)", value=0.0, format="%.4f", key="p_u_tol")
+        l_tol = p3.number_input("하한(-)", value=0.0, format="%.4f", key="p_l_tol")
+        measure = p4.number_input("실측치", value=0.0, format="%.4f", key="p_measure")
+        
+        low_lim, upp_lim = base - abs(l_tol), base + abs(u_tol)
+        st.markdown("---")
+        if low_lim <= measure <= upp_lim:
+            st.success(f"### ✅ 판정: OK (규격: {low_lim:.4f} ~ {upp_lim:.4f})")
+            st.write(f"중심 대비 편차: {measure - base:+.4f}")
+        else:
+            st.error(f"### 🚨 판정: NG (이탈: {measure - upp_lim if measure > upp_lim else measure - low_lim:+.4f})")
+
+    # 3. 토크 변환
     with tabs[2]:
-        t = st.text_area("쉼표 구분 입력", key="s_t")
-        try:
-            l = [float(x.strip()) for x in t.split(",") if x.strip()]
-            if l: st.write(f"평균: {sum(l)/len(l):.4f}")
-        except: pass
+        st.write("### 🔧 토크 단위 변환")
+        tc1, tc2 = st.columns(2)
+        t_v = tc1.number_input("토크 수치", value=0.0, format="%.4f", key="t_v_c")
+        t_m = tc2.selectbox("방향", ["N·m → kgf·m", "kgf·m → N·m"], key="t_m_c")
+        t_r = t_v * 0.101972 if "kgf" in t_m else t_v * 9.80665
+        st.success(f"**결과: {t_r:.4f}**")
+
+    # 4. 단위 변환 (mm/um 포함)
     with tabs[3]:
-        st.write("공차 판정 로직 적용됨")
+        st.write("### 📏 길이/정밀 단위 변환")
+        u1, u2, u3 = st.columns([2, 2, 1])
+        u_i = u1.selectbox("항목", ["길이 (mm/inch)", "정밀 길이 (mm/μm)", "무게 (kg/lb)"], key="u_i_c")
+        u_v = u2.number_input("수치", value=0.0, format="%.4f", key="u_v_c")
+        if "mm/inch" in u_i:
+            u_d = u3.selectbox("방향", ["mm → inch", "inch → mm"], key="ud1")
+            u_res = u_v / 25.4 if "inch" in u_d else u_v * 25.4
+        elif "mm/μm" in u_i:
+            u_d = u3.selectbox("방향", ["mm → μm", "μm → mm"], key="ud2")
+            u_res = u_v * 1000 if "μm" in u_d else u_v / 1000
+        else:
+            u_d = u3.selectbox("방향", ["kg → lb", "lb → kg"], key="ud3")
+            u_res = u_v * 2.20462 if "lb" in u_d else u_v / 2.20462
+        st.info(f"**결과: {u_res:.4f}**")
+
+    # 5. 데이터 산포
+    with tabs[4]:
+        st.write("### 📊 데이터 산포 분석")
+        s_t = st.text_area("숫자 입력 (쉼표 구분)", "10.002, 10.005, 9.998", key="s_t_c")
+        try:
+            s_l = [float(x.strip()) for x in s_t.split(",") if x.strip()]
+            if s_l:
+                sc1, sc2 = st.columns(2)
+                sc1.metric("평균", f"{sum(s_l)/len(s_l):.4f}")
+                sc2.metric("편차(Max-Min)", f"{max(s_l)-min(s_l):.4f}")
+        except: st.error("형식을 확인하세요.")
+        
     st.markdown('</div>', unsafe_allow_html=True)
