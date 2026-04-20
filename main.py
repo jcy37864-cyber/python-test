@@ -11,6 +11,15 @@ from io import BytesIO
 # ==========================================
 def set_global_style():
     st.set_page_config(page_title="품질 통합 분석 시스템 v9.5", layout="wide")
+    st.set_page_config(
+    page_title="Position Analysis Tool",
+    initial_sidebar_state="collapsed",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': "# 본 프로그램의 소유권은 제작자에게 있습니다."
+    }
+)
     st.markdown("""
         <style>
         .main { background-color: #f8fafc; }
