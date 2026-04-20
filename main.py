@@ -206,7 +206,7 @@ elif menu == "📈 그래프 분석":
         
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("📦 전체 샘플", f"{len(df)} EA")
-        c2.metric("✅ 합격 (OK)", f"{len(df)-len(ng_df)} EA", delta=f"{((len(df)-len(ng_df))/len(df))*100:.1;f}%")
+        c2.metric("✅ 합격 (OK)", f"{len(df)-len(ng_df)} EA", delta=f"{((len(df)-len(ng_df))/len(df))*100:.1,f}%")
         c3.metric("🚨 불량 (NG)", f"{len(ng_df)} EA", delta=f"-{len(ng_df)}", delta_color="inverse")
         c4.metric("🎯 Worst Point", f"{worst_val:.3f}", f"Idx: {worst_idx}")
 
