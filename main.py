@@ -307,60 +307,51 @@ def run_quality_calculator():
 # ==========================================
 # 3. 메인 프로그램 제어 (Main Loop)
 # ==========================================
-# ==========================================
-# 3. 메인 프로그램 제어 (Main Loop)
-# ==========================================
 def main():
-    # 1. 초기 설정 (데이터 및 리셋 키)
     if 'reset_key' not in st.session_state: st.session_state.reset_key = 0
     if 'data' not in st.session_state: st.session_state.data = None
 
     set_global_style()
     
-    # 2. 사이드바 메뉴 (깔끔한 네이밍)
     st.sidebar.title("💎 QUALITY HUB v9.5")
     
-    # 설명을 빼고 핵심 키워드만 남깁니다.
+    # 순서를 중요도와 분석 흐름 중심으로 변경
     menu = st.sidebar.radio(
         "📂 분석 카테고리", 
         [
-            "1. 성적서 자동 변환", 
-            "2. XYZ 좌표 변환", 
-            "3. 위치도(MMC) 분석", 
-            "4. 멀티 캐비티 분석", 
-            "5. 품질 통합 계산기"
+            "🎯 위치도(MMC) 분석",      # 메인 1
+            "📈 멀티 캐비티 분석",       # 메인 2
+            "📑 성적서 데이터 변환기",    # 보조 도구 (위치도용)
+            "📐 XYZ 좌표 변환기",      # 보조 도구 (수동/Z축)
+            "🧮 품질 통합 계산기"        # 단순 계산기
         ], 
         key=f"m_{st.session_state.reset_key}"
     )
     
     st.sidebar.markdown("---")
     
-    # 데이터 초기화 버튼 (스타일 유지)
     if st.sidebar.button("🗑️ 모든 데이터 리셋"):
         st.session_state.reset_key += 1
         st.session_state.data = None
         st.rerun()
 
-    # 4. 각 메뉴 선택 시 "친절한 설명"은 화면 상단에 별도로 표시
-    if menu == "1. 성적서 자동 변환":
-        st.caption("📍 위치도 분석 전 성적서 데이터를 표 형식으로 변환합니다.") # 보조 설명
-        run_data_converter()
-        
-    elif menu == "2. XYZ 좌표 변환":
-        st.caption("📍 개별 좌표 입력 및 Z축 데이터 오프셋 연산을 수행합니다.")
-        run_xyz_transformer()
-        
-    elif menu == "3. 위치도(MMC) 분석":
-        st.caption("📍 변환된 데이터를 바탕으로 타겟 차트 및 합불 판정을 수행합니다.")
+    # 실행 로직 순서도 메뉴와 일치시킵니다.
+    if menu == "🎯 위치도(MMC) 분석":
+        st.caption("📍 변환된 데이터를 바탕으로 실시간 위치도 합불 판정 및 시각화를 수행합니다.")
         run_position_analysis()
         
-    elif menu == "4. 멀티 캐비티 분석":
-        st.caption("📍 핀 높이 등 여러 캐비티의 통합 트렌드를 분석합니다.")
+    elif menu == "📈 멀티 캐비티 분석":
+        st.caption("📍 핀 높이 등 여러 캐비티의 통합 데이터 트렌드를 분석합니다.")
         run_cavity_analysis()
         
-    elif menu == "5. 품질 통합 계산기":
-        st.caption("📍 공차 보너스 및 단위 환산을 위한 도구 모음입니다.")
+    elif menu == "📑 성적서 데이터 변환기":
+        st.caption("📍 엑셀 성적서를 복사해 '위치도 분석'용 표로 자동 변환합니다.")
+        run_data_converter()
+        
+    elif menu == "📐 XYZ 좌표 변환기":
+        st.caption("📍 수동 좌표 입력 및 Z축 오프셋(Offset) 연산을 지원합니다.")
+        run_xyz_transformer()
+        
+    elif menu == "🧮 품질 통합 계산기":
+        st.caption("📍 단위 환산, 토크 변환 등 공정 필수 계산 도구 모음입니다.")
         run_quality_calculator()
-
-if __name__ == "__main__":
-    main()
