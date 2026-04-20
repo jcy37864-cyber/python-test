@@ -2,162 +2,238 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 from io import BytesIO
 
-# --- 1. 페이지 설정 및 디자인 ---
-st.set_page_config(page_title="위치도 분석 시스템 v3.4", layout="wide")
+# --- 1. 페이지 설정 및 공통 스타일 ---
+st.set_page_config(page_title="품질 통합 분석 시스템 v6.0", layout="wide")
+
 st.markdown("""
     <style>
-    .stBox { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
-    .guide-blue { color: #2563eb; font-weight: bold; } 
-    .guide-purple { color: #9333ea; font-weight: bold; }
-    .guide-red { color: #ef4444; font-weight: bold; }
-    .summary-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 2px solid #3b82f6; }
+    /* 기본 배경 및 폰트 */
+    .main { background-color: #f4f7f9; }
+    [data-testid="stSidebar"] { background-color: #1e293b !important; }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    
+    /* 카드형 컨테이너 */
+    .stBox { 
+        background-color: #ffffff; padding: 24px; border-radius: 16px; 
+        border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+        margin-bottom: 24px; 
+    }
+    
+    /* 가이드 및 요약 박스 */
+    .guide-box { 
+        background-color: #eff6ff; padding: 15px; border-radius: 10px; 
+        border: 1px solid #bfdbfe; color: #1e40af; font-size: 0.95em; margin-bottom: 20px;
+    }
+    .summary-card { 
+        background-color: #ffffff; padding: 15px; border-radius: 10px; border-top: 5px solid #3b82f6;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin-bottom: 10px; text-align: center;
+    }
+    
+    /* 텍스트 강조 */
+    .ng-text { color: #e11d48; font-weight: bold; }
+    .ok-text { color: #10b981; font-weight: bold; }
+    .report-text { font-size: 1.05em; line-height: 1.8; color: #1e293b; white-space: pre-wrap; }
+    
+    /* 버튼 스타일 */
+    div.stDownloadButton > button {
+        width: 100% !important; font-weight: bold !important;
+        border-radius: 10px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🎯 위치도 정밀 분석 시스템")
+plt.rcParams['axes.unicode_minus'] = False
 
-# --- 2. 초기화 로직 (Session State) ---
+# --- 2. 초기화 및 공통 함수 ---
 if 'reset_key' not in st.session_state: st.session_state.reset_key = 0
+
 def reset_app():
-    st.session_state.reset_key += 1
+    for key in list(st.session_state.keys()): del st.session_state[key]
     st.rerun()
 
-# --- 3. 함수 정의 ---
-def get_template():
-    # 1번부터 시작하도록 템플릿 생성
-    template_df = pd.DataFrame({
-        "측정포인트": [i for i in range(1, 9)],
-        "기본공차": [0.30] * 8, 
-        "도면치수_X": [-55.7, -35.8, -14.8, 5.1, -45.5, -5.1, -55.7, 5.1],
-        "도면치수_Y": [-38.8, -38.8, -38.8, -38.8, -54.7, -54.7, -70.3, -70.3],
-        "측정치_X": [0.0]*8, "측정치_Y": [0.0]*8, "실측지름_MMC용": [0.50]*8
-    })
-    out = BytesIO()
-    with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
-        template_df.to_excel(writer, index=False, sheet_name='위치도양식')
-    return out.getvalue()
+# --- 3. 사이드바 구성 ---
+st.sidebar.title("🛠️ 분석 도구함")
+menu = st.sidebar.radio("📋 메뉴 선택", 
+    ["🔄 데이터 변환기", "📈 멀티 캐비티 분석", "🎯 위치도(MMC) 분석", "🧮 품질 계산기"])
 
-def create_excel_report(dataframe, plotly_fig):
-    output_excel = BytesIO()
-    try:
-        img_bytes = plotly_fig.to_image(format="png", width=800, height=800)
-    except:
-        img_bytes = None
+if st.sidebar.button("🧹 전체 초기화 (Reset)", use_container_width=True):
+    reset_app()
+
+# --- 🔄 메뉴 1: 데이터 변환기 (섹션 1 통합) ---
+if menu == "🔄 데이터 변환기":
+    st.title("🔄 좌표 데이터 변환기")
+    st.markdown('<div class="guide-box"><b>💡 가이드:</b> Z, X, Y 순서로 1열 정렬이 필요한 데이터를 처리합니다.</div>', unsafe_allow_html=True)
     
-    with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-        dataframe.to_excel(writer, sheet_name='분석결과', index=False)
-        worksheet = writer.sheets['분석결과']
-        if img_bytes:
-            worksheet.insert_image('I2', 'graph.png', {'image_data': BytesIO(img_bytes), 'x_scale': 0.6, 'y_scale': 0.6})
-    return output_excel.getvalue()
+    st.markdown('<div class="stBox">', unsafe_allow_html=True)
+    if "df_zxy" not in st.session_state:
+        st.session_state.df_zxy = pd.DataFrame({"X": [""] * 10, "Y": [""] * 10, "Z": [""] * 10})
+    
+    edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic")
+    
+    if st.button("🚀 ZXY 시퀀스 생성", use_container_width=True):
+        results = []
+        for _, row in edited_df.iterrows():
+            x, y, z = str(row.get("X","")).strip(), str(row.get("Y","")).strip(), str(row.get("Z","")).strip()
+            if x and y and z: results.extend([z, x, y])
+        if results:
+            res_df = pd.DataFrame(results, columns=["변환 결과"])
+            st.dataframe(res_df, use_container_width=True)
+            st.download_button("📂 결과 CSV 다운로드", res_df.to_csv(index=True).encode("utf-8-sig"), "zxy_result.csv")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 4. 데이터 입력 및 설정 ---
-with st.expander("📂 데이터 입력 및 설정", expanded=True):
-    header_col1, header_col2 = st.columns([5, 1])
-    with header_col2:
-        if st.button("🔄 데이터 리셋", use_container_width=True): reset_app()
+# --- 📈 메뉴 2: 멀티 캐비티 분석 (섹션 2 통합) ---
+elif menu == "📈 멀티 캐비티 분석":
+    st.title("📈 멀티 캐비티 통합 분석")
+    
+    def get_cavity_template():
+        df_temp = pd.DataFrame({
+            "Point": list(range(1, 11)), "SPEC_MIN": [30.00]*10, "SPEC_MAX": [30.50]*10,
+            "Cavity_1": [30.2]*10, "Cavity_2": [30.22]*10, "Cavity_3": [30.18]*10, "Cavity_4": [30.25]*10
+        })
+        out = BytesIO(); 
+        with pd.ExcelWriter(out, engine='xlsxwriter') as writer: df_temp.to_excel(writer, index=False)
+        return out.getvalue()
+
+    col_f1, col_f2 = st.columns([3, 1])
+    with col_f2: st.download_button("📄 분석 템플릿 받기", get_cavity_template(), "Cavity_Template.xlsx")
+    with col_f1: uploaded_file = st.file_uploader("파일 업로드", type=["xlsx", "csv"], key=f"cav_{st.session_state.reset_key}")
+
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
+        cav_cols = [c for c in df.columns if 'Cavity' in c or 'Cav' in c]
+        
+        # 1. 상세 분포 (개별 그래프)
+        st.subheader("🔍 캐비티별 상세 분포")
+        c_grid = st.columns(2)
+        summary_results = []
+        cav_colors = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6']
+        
+        for i, cav in enumerate(cav_cols):
+            df[f"{cav}_판정"] = df.apply(lambda x: "OK" if x["SPEC_MIN"] <= x[cav] <= x["SPEC_MAX"] else "NG", axis=1)
+            with c_grid[i % 2]:
+                st.markdown('<div class="stBox">', unsafe_allow_html=True)
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MIN"], line=dict(color="blue", dash="dash"), name="MIN"))
+                fig.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MAX"], line=dict(color="red", dash="dash"), name="MAX"))
+                colors = ['#ef4444' if p == "NG" else cav_colors[i % 4] for p in df[f"{cav}_판정"]]
+                fig.add_trace(go.Bar(x=df["Point"], y=df[cav], marker_color=colors, name=cav))
+                fig.update_layout(title=f"<b>{cav} 분석</b>", height=300, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig, use_container_width=True)
+                summary_results.append({"cav": cav, "ng": len(df[df[f"{cav}_판정"]=="NG"]), "total": len(df), "color": cav_colors[i % 4]})
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # 2. 요약 대시보드
+        st.subheader("📋 실시간 품질 현황")
+        d_cols = st.columns(len(summary_results))
+        for i, res in enumerate(summary_results):
+            rate = ((res['total'] - res['ng']) / res['total']) * 100
+            d_cols[i].markdown(f'<div class="summary-card" style="border-top-color: {res["color"]};">'
+                               f'<small>{res["cav"]}</small><br><span class="{"ok-text" if rate==100 else "ng-text"}" style="font-size:1.5em;">{rate:.1f}%</span><br>'
+                               f'<small>NG: {res["ng"]}</small></div>', unsafe_allow_html=True)
+
+        # 3. 평균 Trend 및 통합 엑셀 다운로드
+        st.markdown('<div class="stBox">', unsafe_allow_html=True)
+        df['Average'] = df[cav_cols].mean(axis=1)
+        fig_total = go.Figure()
+        fig_total.add_trace(go.Scatter(x=df["Point"], y=df['Average'], name="평균 Trend", line=dict(color="black", width=3)))
+        for i, cav in enumerate(cav_cols):
+            fig_total.add_trace(go.Scatter(x=df["Point"], y=df[cav], name=cav, mode='markers', marker=dict(size=6, opacity=0.4)))
+        st.plotly_chart(fig_total, use_container_width=True)
+        
+        # 엑셀 보고서 생성
+        output_res = BytesIO()
+        with pd.ExcelWriter(output_res, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Analysis')
+        st.download_button("📥 통합 분석 보고서(XLSX) 저장", output_res.getvalue(), "Cavity_Report.xlsx", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# --- 🎯 메뉴 3: 위치도(MMC) 분석 (섹션 3 통합) ---
+elif menu == "🎯 위치도(MMC) 분석":
+    st.title("🎯 위치도 및 MMC 정밀 분석")
+    
+    def get_mmc_template():
+        df_temp = pd.DataFrame({"측정포인트": range(1, 9), "기본공차": [0.3]*8, "도면치수_X": [0.0]*8, "도면치수_Y": [0.0]*8, "측정치_X": [0.01]*8, "측정치_Y": [-0.01]*8, "실측지름_MMC용": [0.55]*8})
+        out = BytesIO(); 
+        with pd.ExcelWriter(out, engine='xlsxwriter') as writer: df_temp.to_excel(writer, index=False)
+        return out.getvalue()
+
+    st.markdown("""<div class="guide-box"><b>과녁 가이드:</b> 🔵기본규격 | 🟣MMC보너스 합격선 | 🔴NG 마지노선</div>""", unsafe_allow_html=True)
     
     c1, c2 = st.columns([1, 2])
     with c1:
-        st.download_button("📥 한글 양식 다운로드", data=get_template(), file_name="위치도_양식.xlsx", use_container_width=True)
-        mmc_val = st.number_input("MMC 기준값(최소지름)", value=0.500, format="%.3f")
+        st.download_button("📥 위치도 양식 받기", get_mmc_template(), "MMC_Template.xlsx")
+        mmc_base = st.number_input("MMC 기준값(Min 지름)", value=0.500, format="%.3f")
     with c2:
-        file = st.file_uploader("데이터 업로드", type=["xlsx"], key=f"up_{st.session_state.reset_key}")
+        file = st.file_uploader("데이터 업로드", type=["xlsx"], key=f"mmc_{st.session_state.reset_key}")
 
-# 데이터 로딩 및 계산
-if file:
-    df = pd.read_excel(file)
-else:
-    # 샘플 데이터 (1번부터 시작)
-    df = pd.DataFrame({
-        "측정포인트": [1, 2, 3, 4, 5, 6, 7, 8],
-        "기본공차": [0.30] * 8, 
-        "도면치수_X": [-55.7, -35.8, -14.8, 5.1, -45.5, -5.1, -55.7, 5.1],
-        "도면치수_Y": [-38.8, -38.8, -38.8, -38.8, -54.7, -54.7, -70.3, -70.3],
-        "측정치_X": [-55.715, -35.790, -14.810, 5.105, -45.525, -5.090, -55.740, 5.115],
-        "측정치_Y": [-38.820, -38.805, -38.790, -38.815, -54.720, -54.685, -70.320, -70.310],
-        "실측지름_MMC용": [0.556, 0.524, 0.532, 0.550, 0.510, 0.505, 0.560, 0.545]
-    })
+    if file: df_m = pd.read_excel(file)
+    else: df_m = pd.DataFrame({"측정포인트": [1], "기본공차": [0.3], "도면치수_X": [0], "도면치수_Y": [0], "측정치_X": [0.05], "측정치_Y": [0.08], "실측지름_MMC용": [0.52]})
 
-# 계산 로직
-df['X편차'] = df['측정치_X'] - df['도면치수_X']
-df['Y편차'] = df['측정치_Y'] - df['도면치수_Y']
-df['위치도결과'] = 2 * np.sqrt(df['X편차']**2 + df['Y편차']**2)
-df['보너스'] = (df['실측지름_MMC용'] - mmc_val).clip(lower=0)
-df['최종공차'] = df['기본공차'] + df['보너스']
-df['판정'] = np.where(df['위치도결과'] <= df['최종공차'], "OK", "NG")
-df['소진율(%)'] = (df['위치도결과'] / df['최종공차']) * 100
+    # 계산
+    df_m['X편차'] = df_m['측정치_X'] - df_m['도면치수_X']
+    df_m['Y편차'] = df_m['측정치_Y'] - df_m['도면치수_Y']
+    df_m['위치도결과'] = 2 * np.sqrt(df_m['X편차']**2 + df_m['Y편차']**2)
+    df_m['보너스'] = (df_m['실측지름_MMC용'] - mmc_base).clip(lower=0)
+    df_m['최종공차'] = df_m['기본공차'] + df_m['보너스']
+    df_m['판정'] = np.where(df_m['위치도결과'] <= df_m['최종공차'], "OK", "NG")
 
-# 인덱스를 1부터 표시하기 위해 조정
-df.index = np.arange(1, len(df) + 1)
+    # 그래프
+    fig_m = go.Figure()
+    fig_m.update_xaxes(zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#eee')
+    fig_m.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#eee')
+    
+    # 공차 원들
+    fig_m.add_shape(type="circle", x0=-0.15, y0=-0.15, x1=0.15, y1=0.15, line=dict(color="Blue", dash="dot"))
+    max_t = df_m['최종공차'].max() / 2
+    fig_m.add_shape(type="circle", x0=-max_t, y0=-max_t, x1=max_t, y1=max_t, line=dict(color="Purple", width=2), fillcolor="rgba(147, 112, 219, 0.1)")
+    fig_m.add_shape(type="circle", x0=-(max_t+0.02), y0=-(max_t+0.02), x1=(max_t+0.02), y1=(max_t+0.02), line=dict(color="Red", dash="dashdot"))
 
-# --- 5. 시각화 가이드 및 그래프 (NG 경계선 추가) ---
-st.markdown("""
-    <div class="stBox">
-        <h4>💡 과녁 범위 읽는 법 (v3.4)</h4>
-        <ul>
-            <li><span class="guide-blue">🔵 파란 점선 원:</span> <b>기본 공차 영역 (ø0.3)</b> - 보너스 없는 순수 규격 범위</li>
-            <li><span class="guide-purple">🟣 보라색 실선 영역:</span> <b>최종 합격선 (MMC)</b> - 보너스가 포함되어 확장된 실제 합격 범위</li>
-            <li><span class="guide-red">🔴 빨간 점선 원:</span> <b>규격 이탈 경계선 (NG)</b> - 이 선을 넘으면 불합격입니다.</li>
-            <li><span style="color:#ef4444; font-weight:bold;">🔴 빨간색 점:</span> NG 포인트 | <span style="color:#10b981; font-weight:bold;">🟢 녹색 점:</span> OK 포인트</li>
-        </ul>
-    </div>
-""", unsafe_allow_html=True)
+    for _, row in df_m.iterrows():
+        color = '#10b981' if row['판정'] == "OK" else '#ef4444'
+        fig_m.add_trace(go.Scatter(x=[row['X편차']], y=[row['Y편차']], mode='markers+text', text=[f"<b>{row['측정포인트']}</b>"], textposition="top center", marker=dict(size=12, color=color, line=dict(width=1, color='white'))))
+    
+    fig_m.update_layout(xaxis_range=[-0.35, 0.35], yaxis_range=[-0.35, 0.35], height=600, template="plotly_white", showlegend=False)
+    st.plotly_chart(fig_m, use_container_width=True)
+    
+    st.dataframe(df_m.style.map(lambda x: 'color:red; font-weight:bold' if x == 'NG' else '', subset=['판정']), use_container_width=True)
 
-fig = go.Figure()
-# 축 강조
-fig.update_xaxes(zeroline=True, zerolinewidth=2.5, zerolinecolor='black', showgrid=True, gridcolor='#eee')
-fig.update_yaxes(zeroline=True, zerolinewidth=2.5, zerolinecolor='black', showgrid=True, gridcolor='#eee')
+# --- 🧮 메뉴 4: 품질 계산기 (섹션 1 통합) ---
+elif menu == "🧮 품질 계산기":
+    st.title("🧮 현장용 간편 계산기")
+    st.markdown('<div class="stBox">', unsafe_allow_html=True)
+    tabs = st.tabs(["🎯 MMC 보너스", "⚖️ 공차 판정", "🔧 토크 변환", "📏 단위 변환", "📊 기초 통계"])
+    
+    with tabs[0]:
+        c1, c2 = st.columns(2)
+        m_type = c1.radio("유형", ["구멍 (Hole)", "축 (Shaft)"], horizontal=True)
+        m_geo = c2.number_input("도면 기하공차", value=0.05, format="%.3f")
+        m_mmc, m_act = st.number_input("MMC 규격 지름", value=10.0), st.number_input("실측 지름", value=10.02)
+        bonus = max(0.0, m_act - m_mmc if "구멍" in m_type else m_mmc - m_act)
+        st.metric("최종 허용 공차 (기하+보너스)", f"{m_geo + bonus:.4f}")
+        
+    with tabs[1]:
+        p1, p2, p3, p4 = st.columns(4)
+        base = p1.number_input("기준치", value=10.0)
+        u_t = p2.number_input("상한(+)", value=0.1)
+        l_t = p3.number_input("하한(-)", value=-0.1)
+        ms = p4.number_input("측정치", value=10.05)
+        if (base + l_t) <= ms <= (base + u_t): st.success("✅ 규격 이내 (OK)")
+        else: st.error("🚨 규격 이탈 (NG)")
+        
+    with tabs[2]:
+        v = st.number_input("수치 입력", value=1.0)
+        m = st.selectbox("변환 선택", ["N·m → kgf·m", "kgf·m → N·m"])
+        res = v * 0.101972 if "kgf" in m else v * 9.80665
+        st.info(f"계산 결과: {res:.4f}")
 
-# 원 그리기
-# 1. 기본공차 영역 (파란색 점선)
-fig.add_shape(type="circle", x0=-0.15, y0=-0.15, x1=0.15, y1=0.15, line=dict(color="Blue", width=2, dash="dot"))
-
-# 2. 최종 합격 영역 (보라색 채우기)
-max_t = df['최종공차'].max()
-fig.add_shape(type="circle", x0=-max_t/2, y0=-max_t/2, x1=max_t/2, y1=max_t/2, 
-             line=dict(color="Purple", width=2.5), fillcolor="rgba(147, 112, 219, 0.1)")
-
-# [신규] 3. NG 경계선 영역 (빨간색 점선)
-# 최종 합격선(보라색)보다 약간 더 넓게 그려서 "여길 넘으면 불량"임을 시각화
-fig.add_shape(type="circle", x0=-(max_t/2 + 0.02), y0=-(max_t/2 + 0.02), x1=(max_t/2 + 0.02), y1=(max_t/2 + 0.02), 
-             line=dict(color="Red", width=1.5, dash="dashdot"))
-
-# 포인트 찍기
-for _, row in df.iterrows():
-    p_color = '#10b981' if row['판정'] == "OK" else '#ef4444'
-    fig.add_trace(go.Scatter(
-        x=[row['X편차']], y=[row['Y편차']], name=str(row['측정포인트']),
-        mode='markers+text', text=[f"<b>{row['측정포인트']}</b>"], textposition="top center",
-        marker=dict(size=13, color=p_color, line=dict(width=1.5, color='white'))
-    ))
-
-fig.update_layout(xaxis=dict(range=[-0.35, 0.35], title="X 편차"), 
-                  yaxis=dict(range=[-0.35, 0.35], scaleanchor="x", scaleratio=1, title="Y 편차"),
-                  height=650, template="plotly_white", showlegend=False)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# --- 6. 상세 데이터 표 ---
-st.markdown('<div class="stBox">', unsafe_allow_html=True)
-st.subheader("📋 분석 상세 데이터 (1번부터 시작)")
-styled_df = df.style.map(lambda x: 'color:red; font-weight:bold' if x == 'NG' else '', subset=['판정'])
-st.dataframe(styled_df, use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
-
-# --- 7. 하단 요약 및 보고서 ---
-st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-st.subheader("📊 품질 분석 요약")
-res_c1, res_c2, res_c3 = st.columns(3)
-with res_c1:
-    st.write(f"**총 검사:** {len(df)} 포인트")
-    st.write(f"**합격/불합격:** {len(df[df['판정']=='OK'])} / {len(df[df['판정']=='NG'])}")
-with res_c2:
-    if len(df[df['판정']=="NG"]) == 0: st.success("✅ 모든 포인트 규격 합격")
-    else: st.error(f"🚨 {len(df[df['판정']=='NG'])}개 포인트 불합격 발생")
-with res_c3:
-    report = create_excel_report(df, fig)
-    st.download_button("🚀 이미지 포함 엑셀 보고서 저장", data=report, file_name="위치도_보고서.xlsx", use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
+    with tabs[4]:
+        data_str = st.text_area("데이터 입력 (쉼표로 구분, 예: 10.1, 10.2, 9.9)")
+        if data_str:
+            try:
+                nums = [float(x.strip()) for x in data_str.split(",") if x.strip()]
+                st.write(f"**평균:** {np.mean(nums):.4f}  |  **범위(R):** {np.ptp(nums):.4f}  |  **표준편차:** {np.std(nums):.4f}")
+            except: st.error("숫자 형식을 확인해주세요.")
+    st.markdown('</div>', unsafe_allow_html=True)
