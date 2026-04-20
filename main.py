@@ -50,13 +50,12 @@ def run_data_converter():
     st.info("💡 엑셀 성적서에서 'Ref'부터 데이터 끝까지 복사(Ctrl+C)해서 아래에 붙여넣으세요.")
 
     # 데이터 입력창
-    raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="Ref    1.nmp    2.nmp ... \nPIN2   0.048    0.074 ...")
+    raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="Ref    1.nmp    2.nmp ... \nPIN2    0.048    0.074 ...")
 
     if st.button("🚀 분석 데이터로 변환"):
         if raw_data:
             try:
-                # 1. 텍스트 데이터를 행 단위로 나누고, 각 행을 탭이나 공백으로 나누기
-                # lines 변수가 여기서 확실히 정의됩니다.
+                # 1. 텍스트 데이터를 행 단위로 나누기
                 lines = [line.split('\t') for line in raw_data.strip().split('\n')]
                 
                 # 만약 탭으로 안 나눠지면 공백으로 시도
@@ -71,18 +70,12 @@ def run_data_converter():
                     
                     try:
                         pin_line = lines[i]    # PIN 이름 및 도면치수 포함 라인
-                        # mmc_line = lines[i+1] # MMC공차 라인 (현재는 사용 안 함)
                         x_line = lines[i+2]    # X 측정치 라인
                         y_line = lines[i+3]    # Y 측정치 라인
                         
-                        # 도면치수(Nominal) 추출: 성적서 양식상 pin_line의 앞쪽 어딘가에 있음
-                        # 텍스트 복사 방식에 따라 인덱스가 달라질 수 있으므로 안전하게 추출
                         pin_name = pin_line[0].strip()
                         
-                        # 보통 Nominal 값은 리스트의 특정 위치에 있거나 re로 찾아야 함
-                        # 사용자님 성적서 기준: Nominal X는 pin_line 근처, Nominal Y는 그 아래줄 근처
                         try:
-                            # x_line과 y_line의 첫 번째 항목이 보통 도면치수인 경우가 많음 (복사 시)
                             nom_x = clean_float(x_line[0])
                             nom_y = clean_float(y_line[0])
                         except:
@@ -94,20 +87,21 @@ def run_data_converter():
                             if s + 1 < len(x_line) and s + 1 < len(y_line):
                                 act_x = clean_float(x_line[s+1])
                                 act_y = clean_float(y_line[s+1])
-                                # 실측지름(MMC공차 라인)도 샘플별로 가져오기
                                 act_dia = clean_float(lines[i+1][s+1]) if s+1 < len(lines[i+1]) else 0.35
                                 
                                 processed_results.append({
                                     "측정포인트": f"{pin_name}_S{s+1}",
                                     "기본공차": 0.35,
-                                    "도면치수_X": nom_x,  # 이제 0이 아니라 추출된 값 입력
-                                    "도면치수_Y": nom_y,  # 이제 0이 아니라 추출된 값 입력
+                                    "도면치수_X": nom_x,
+                                    "도면치수_Y": nom_y,
                                     "측정치_X": act_x,
                                     "측정치_Y": act_y,
                                     "실측지름_MMC용": act_dia
                                 })
                     except Exception as inner_e:
                         continue
+
+                # --- 결과 출력 및 안내 (이 부분이 질문하신 핵심 내용) ---
                 if processed_results:
                     df_result = pd.DataFrame(processed_results)
                     st.success(f"✅ 총 {len(processed_results)}개의 샘플 데이터를 변환했습니다!")
@@ -116,9 +110,12 @@ def run_data_converter():
                     # 분석 세션에 자동 저장
                     st.session_state.data = df_result
                     st.balloons()
-                    st.info("📊 '멀티 캐비티 분석' 메뉴로 가시면 바로 그래프를 볼 수 있습니다.")
+                    
+                    # ✅ 정확하게 수정된 안내 문구
+                    st.info("🎯 변환 완료! 이제 상단의 **'📊 Step 2. 위치도 결과 분석'** 탭을 클릭하세요.")
                 else:
                     st.error("데이터를 분석할 수 없습니다. 형식을 확인해주세요.")
+
             except Exception as e:
                 st.error(f"오류 발생: {e}")
         else:
