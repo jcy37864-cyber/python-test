@@ -269,8 +269,11 @@ def main():
     if menu == "🔄 데이터 변환기":
         run_data_converter()
     elif menu == "📈 멀티 캐비티 분석":
-        run_multi_analysis()
+        run_cavity_analysis()
     elif menu == "🎯 위치도(MMC) 분석":
         run_position_analysis()
     elif menu == "🧮 품질 계산기":
         run_quality_calculator()
+
+    if __name__ == "__main__":
+    main()
