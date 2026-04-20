@@ -47,10 +47,14 @@ def clean_float(value):
 
 def run_data_converter():
     st.header("🔄 성적서 데이터 자동 변환기")
-    st.info("💡 엑셀 성적서에서 'Ref'부터 데이터 끝까지 복사(Ctrl+C)해서 아래에 붙여넣으세요.")
+    st.info("💡 **도면치수(Nominal)** 열부터 CAVITY 데이터 끝(**4.nmp**)까지 통째로 복사해서 붙여넣으세요.")
 
     # 데이터 입력창
-    raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="Ref    1.nmp    2.nmp ... \nPIN2    0.048    0.074 ...")
+    raw_data = st.text_area(
+        "성적서 데이터를 붙여넣으세요", 
+        height=300, 
+        placeholder="[복사 가이드]\n1. 성적서의 'Nominal' 열부터 '4.nmp' 열까지 영역을 드래그합니다.\n2. PIN2, PIN3 등 모든 행이 포함되게 복사(Ctrl+C)합니다.\n3. 이곳에 붙여넣기(Ctrl+V) 하세요."
+    )
 
     if st.button("🚀 분석 데이터로 변환"):
         if raw_data:
