@@ -305,11 +305,53 @@ def run_position_analysis():
             except AttributeError:
                 st.dataframe(final_display.style.applymap(highlight_pass_fail, subset=['판정']), use_container_width=True)
 
-            # 3. 🎨 위치도 산포도 그래프 작성
+           # 3. 🎨 위치도 산포도 그래프 작성 (공차 구역 구분 버전)
             st.divider()
-            st.subheader("🎯 위치도 산포도 분석 (Deviation Plot)")
+            st.subheader("🎯 위치도 산포도 분석 (Tolerance Zones)")
             
             fig, ax = plt.subplots(figsize=(8, 8))
+            
+            # 편차 계산
+            dev_x = df_m['측정치_X'] - df_m['도면치수_X']
+            dev_y = df_m['측정치_Y'] - df_m['도면치수_Y']
+            
+            # 1️⃣ 기본 공차 원 (Ø0.35 기준 -> 반지름 0.175)
+            basic_radius = 0.35 / 2
+            circle_basic = plt.Circle((0, 0), basic_radius, color='blue', fill=True, 
+                                      alpha=0.1, linestyle='--', label=f'Basic Tol (Ø0.35)')
+            ax.add_patch(circle_basic)
+            ax.add_patch(plt.Circle((0, 0), basic_radius, color='blue', fill=False, linestyle='--'))
+
+            # 2️⃣ 최종 공차 원 (MMC 보너스 포함 -> 빨간색)
+            # 데이터 중 가장 큰 최종공차를 기준으로 원을 그려 시각적 가이드 제공
+            max_final_tol = df_m['최종공차'].max()
+            max_radius = max_final_tol / 2
+            circle_mmc = plt.Circle((0, 0), max_radius, color='red', fill=False, 
+                                    linewidth=2, label=f'Max MMC Tol (Ø{max_final_tol})')
+            ax.add_patch(circle_mmc)
+            
+            # 데이터 포인트
+            colors = df_m['판정'].apply(lambda x: '#2ecc71' if 'OK' in x else '#e74c3c')
+            ax.scatter(dev_x, dev_y, c=colors, s=60, edgecolors='white', zorder=5, label='Measured Points')
+            
+            # 그래프 꾸미기
+            ax.axhline(0, color='black', linewidth=1)
+            ax.axvline(0, color='black', linewidth=1)
+            ax.set_xlabel("Deviation X")
+            ax.set_ylabel("Deviation Y")
+            ax.set_title("Position Error: Basic vs MMC Zone", fontsize=15)
+            ax.grid(True, linestyle=':', alpha=0.6)
+            ax.set_aspect('equal')
+            
+            # 범례 추가
+            ax.legend(loc='upper right')
+            
+            # 축 범위 조절
+            limit = max_radius * 1.5
+            ax.set_xlim(-limit, limit)
+            ax.set_ylim(-limit, limit)
+            
+            st.pyplot(fig)
             
             # 편차 계산 (중심을 0,0으로 만들기 위함)
             dev_x = df_m['측정치_X'] - df_m['도면치수_X']
