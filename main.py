@@ -260,47 +260,86 @@ def run_cavity_analysis():
         st.markdown('</div>', unsafe_allow_html=True)
 
 def run_position_analysis():
-    """메뉴 3: 위치도 분석"""
-    st.title("🎯 위치도 정밀 분석 (MMC)")
-    def get_pos_template():
-        df_pt = pd.DataFrame({"측정포인트": [1], "기본공차": [0.3], "도면치수_X": [10.0], "도면치수_Y": [10.0], "측정치_X": [10.02], "측정치_Y": [10.01], "실측지름_MMC용": [0.52]})
-        out = BytesIO(); writer = pd.ExcelWriter(out, engine='xlsxwriter'); df_pt.to_excel(writer, index=False); writer.close()
-        return out.getvalue()
-    
-    st.download_button("📄 위치도 템플릿 다운로드", get_pos_template(), "Position_Template.xlsx")
-    up_pos = st.file_uploader("파일 업로드", type=["xlsx"])
-    
-    if up_pos:
-        df_m = pd.read_excel(up_pos)
-        mmc_val = st.number_input("MMC 기준값", value=0.500, format="%.3f")
-        df_m['X편차'] = df_m['측정치_X'] - df_m['도면치수_X']
-        df_m['Y편차'] = df_m['측정치_Y'] - df_m['도면치수_Y']
-        df_m['위치도결과'] = 2 * np.sqrt(df_m['X편차']**2 + df_m['Y편차']**2)
-        df_m['최종공차'] = df_m['기본공차'] + (df_m['실측지름_MMC용'] - mmc_val).clip(lower=0)
-        df_m['판정'] = np.where(df_m['위치도결과'] <= df_m['최종공차'], "OK", "NG")
+    st.header("📊 Step 2. 위치도 결과 분석")
 
-        st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        st.markdown('<div class="guide-box">🔵 <span style="color:blue">파란 점선</span>: 중심 정밀 관리 (±0.05) | 🟣 <span style="color:purple">보라 실선</span>: <b>최종 합격 공차</b> | 🔴 <span style="color:red">빨간 점선</span>: 공차 한계선</div>', unsafe_allow_html=True)
-        
-        fig_m = go.Figure()
-        fig_m.update_yaxes(scaleanchor="x", scaleratio=1, zeroline=True, zerolinecolor='black')
-        fig_m.update_xaxes(zeroline=True, zerolinecolor='black')
-        max_t = df_m['최종공차'].max() / 2
-        fig_m.add_shape(type="circle", x0=-0.05, y0=-0.05, x1=0.05, y1=0.05, line=dict(color="Blue", width=1, dash="dot"))
-        fig_m.add_shape(type="circle", x0=-max_t, y0=-max_t, x1=max_t, y1=max_t, line=dict(color="Purple", width=3), fillcolor="rgba(147, 112, 219, 0.1)")
-        fig_m.add_shape(type="circle", x0=-(max_t+0.05), y0=-(max_t+0.05), x1=(max_t+0.05), y1=(max_t+0.05), line=dict(color="Red", width=1, dash="dash"))
-        for _, r in df_m.iterrows():
-            p_c = '#10b981' if r['판정']=="OK" else '#ef4444'
-            fig_m.add_trace(go.Scatter(x=[r['X편차']], y=[r['Y편차']], mode='markers+text', text=[f"<b>{r['측정포인트']}</b>"], textposition="top center", marker=dict(size=12, color=p_c, line=dict(width=1, color='white'))))
-        
-        st.plotly_chart(fig_m, use_container_width=True, config={'toImageButtonOptions': {'format': 'png', 'filename': 'Position_Target', 'scale': 2}})
-        st.markdown('<div class="capture-info">📸 그래프 우측 상단 <b>카메라 아이콘</b>을 누르면 고화질 PNG 이미지가 저장됩니다.</div>', unsafe_allow_html=True)
-        st.subheader("📋 실측 데이터 확인")
-        st.dataframe(df_m.style.map(lambda x: 'background-color: #d1fae5' if x == 'OK' else 'background-color: #fee2e2', subset=['판정']), use_container_width=True)
-        
-        out_pos = BytesIO(); writer = pd.ExcelWriter(out_pos, engine='xlsxwriter'); df_m.to_excel(writer, index=False); writer.close()
-        st.download_button("📥 위치도 분석 결과 저장 (Excel)", out_pos.getvalue(), "Position_Analysis.xlsx")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # 세션 상태에 데이터가 있는지 확인
+    if 'data' not in st.session_state or st.session_state.data is None:
+        st.warning("⚠️ Step 1에서 데이터를 먼저 변환하거나 업로드해주세요.")
+        return
+
+    # 데이터 가져오기
+    df_m = st.session_state.data.copy()
+
+    # --- [데이터 전처리] 모든 수치형 컬럼을 강제로 숫자 형식으로 변환 ---
+    # 엑셀 업로드 시 문자로 인식되는 문제를 방지합니다.
+    numeric_cols = ['기본공차', '도면치수_X', '도면치수_Y', '측정치_X', '측정치_Y', '실측지름_MMC용']
+    for col in numeric_cols:
+        if col in df_m.columns:
+            df_m[col] = pd.to_numeric(df_m[col], errors='coerce').fillna(0.0)
+
+    # MMC 기준값 설정 (UI)
+    st.subheader("⚙️ 분석 설정")
+    col1, col2 = st.columns(2)
+    with col1:
+        # 이미지에 있던 기본값 0.35 설정
+        mmc_val = st.number_input("📏 MMC 기준값 (최대 실체 조건 지름)", value=0.35, step=0.001, format="%.3f")
+    with col2:
+        st.write("")
+        st.write("💡 실측지름이 기준값보다 클 경우 보너스 공차가 발생합니다.")
+
+    if st.button("🔍 위치도 분석 실행"):
+        try:
+            # 1. 위치도 계산 공식: √((X1-X0)² + (Y1-Y0)²) * 2
+            df_m['위치도결과'] = (
+                ((df_m['측정치_X'] - df_m['도면치수_X'])**2 + 
+                 (df_m['측정치_Y'] - df_m['도면치수_Y'])**2)**0.5 * 2
+            ).round(4)
+
+            # 2. 최종공차(MMC 적용) 계산
+            # 최종공차 = 기본공차 + (실측지름 - MMC기준값) -> 단, 보너스는 0보다 작을 수 없음
+            df_m['보너스공차'] = (df_m['실측지름_MMC용'] - mmc_val).clip(lower=0).round(4)
+            df_m['최종공차'] = (df_m['기본공차'] + df_m['보너스공차']).round(4)
+
+            # 3. 합불 판정
+            df_m['판정'] = df_m.apply(lambda x: "✅ OK" if x['위치도결과'] <= x['최종공차'] else "❌ NG", axis=1)
+
+            # --- 결과 출력 ---
+            st.divider()
+            st.subheader("📝 분석 결과 보고서")
+            
+            # 보기 편하게 컬럼 순서 재배치
+            display_cols = [
+                '측정포인트', '도면치수_X', '도면치수_Y', '측정치_X', '측정치_Y', 
+                '위치도결과', '기본공차', '보너스공차', '최종공차', '판정'
+            ]
+            
+            # 실제 존재하는 컬럼만 출력
+            final_display = df_m[[c for c in display_cols if c in df_m.columns]]
+            
+            # 판정 결과에 따라 색상 입히기
+            def highlight_pass_fail(val):
+                color = '#DFF2BF' if 'OK' in str(val) else '#FFBABA'
+                return f'background-color: {color}'
+
+            st.dataframe(
+                final_display.style.applymap(highlight_pass_fail, subset=['판정']),
+                use_container_width=True
+            )
+
+            # 통계 요약
+            ok_count = (df_m['판정'] == "✅ OK").sum()
+            ng_count = (df_m['판정'] == "❌ NG").sum()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("전체 샘플", f"{len(df_m)}개")
+            c2.metric("합격(OK)", f"{ok_count}개", delta_color="normal")
+            c3.metric("불합격(NG)", f"{ng_count}개", delta="-"+str(ng_count) if ng_count > 0 else "0", delta_color="inverse")
+
+            st.success("✅ 모든 분석이 완료되었습니다.")
+
+        except Exception as e:
+            st.error(f"⚠️ 분석 중 오류가 발생했습니다: {e}")
+            st.info("데이터 형식을 확인해주세요. (Step 1에서 변환이 정상적으로 되었는지 확인)")
 
 def run_quality_calculator():
     """메뉴 4: 품질 계산기"""
