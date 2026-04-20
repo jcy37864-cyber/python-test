@@ -1,168 +1,198 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
 from io import BytesIO
 
 # 1. 페이지 설정
-st.set_page_config(page_title="품질 측정 통합 프로그램 v2.0", layout="wide")
+st.set_page_config(page_title="품질 측정 통합 프로그램", layout="wide")
 
-# 2. 그래프 폰트 및 스타일 설정
+# 2. 그래프 폰트 설정 (영문 폰트 기본 사용, 마이너스 깨짐 방지)
 plt.rcParams['axes.unicode_minus'] = False
 plt.rc('font', family='sans-serif') 
 
-# 3. 사이드바 스타일 및 타이틀
+# 3. 사이드바 스타일
 st.markdown("""
 <style>
 [data-testid="stSidebar"] { background-color: #0E1117; }
 [data-testid="stSidebar"] * { color: white; }
-.main-title { font-size: 30px; font-weight: bold; color: #1E88E5; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 품질 측정 통합 시스템 (Master)")
+st.title("📊 품질 측정 통합 프로그램")
 
 menu = st.sidebar.radio(
     "메뉴 선택",
-    ["🔄 ZXY 대량 변환", "📈 전문 그래프 분석 (CPK)", "🧮 정밀 공차 계산기"]
+    ["🔄 ZXY 변환", "📈 그래프 분석", "🧮 계산기"]
 )
 
 # =========================
-# 🔄 ZXY 대량 변환 (복사-붙여넣기 최적화)
+# 🔄 ZXY 변환
 # =========================
-if menu == "🔄 ZXY 대량 변환":
-    st.subheader("🔄 ZXY 데이터 대량 변환")
-    st.info("엑셀에서 X, Y, Z 열을 복사하여 아래 입력창에 붙여넣으세요. (탭 구분 지원)")
-    
-    raw_data = st.text_area("여기에 데이터를 붙여넣으세요 (예: X [Tab] Y [Tab] Z)", height=200)
-    
-    if st.button("데이터 변환 시작"):
-        try:
-            # 텍스트 데이터를 데이터프레임으로 변환 (클립보드 데이터 형태 대응)
-            from io import StringIO
-            df_input = pd.read_csv(StringIO(raw_data), sep='\t', names=['X', 'Y', 'Z'])
-            
-            if df_input.empty:
-                st.warning("데이터가 없습니다. 다시 확인해주세요.")
-            else:
-                results = []
-                for _, row in df_input.iterrows():
-                    x, y, z = str(row["X"]).strip(), str(row["Y"]).strip(), str(row["Z"]).strip()
-                    results.extend([z, x, y])
-                
-                result_df = pd.DataFrame(results, columns=["변환 결과"])
-                st.success(f"총 {len(df_input)}행 데이터 변환 완료!")
-                
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    st.dataframe(result_df, use_container_width=True)
-                with col2:
-                    csv = result_df.to_csv(index=False).encode("utf-8-sig")
-                    st.download_button("📂 변환 결과 CSV 다운로드", csv, "zxy_bulk_result.csv")
-        except Exception as e:
-            st.error(f"데이터 형식이 올바르지 않습니다: {e}")
+if menu == "🔄 ZXY 변환":
+    st.subheader("🔄 ZXY 데이터 변환")
+    st.info("X, Y, Z를 입력하면 [Z -> X -> Y] 순서로 데이터가 세로로 쌓여 결과가 생성됩니다.")
+
+    if "df_zxy" not in st.session_state:
+        st.session_state.df_zxy = pd.DataFrame({
+            "X": [""] * 100,
+            "Y": [""] * 100,
+            "Z": [""] * 100,
+        })
+
+    edited_df = st.data_editor(
+        st.session_state.df_zxy,
+        use_container_width=True,
+        num_rows="dynamic"
+    )
+
+    if st.button("ZXY 결과 생성"):
+        results = []
+        for _, row in edited_df.iterrows():
+            x, y, z = str(row["X"]).strip(), str(row["Y"]).strip(), str(row["Z"]).strip()
+            if x and y and z:
+                results.extend([z, x, y])
+
+        if results:
+            result_df = pd.DataFrame(results, columns=["변환 결과"])
+            st.dataframe(result_df, use_container_width=True)
+            csv = result_df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button("📂 CSV 다운로드", csv, "zxy_result.csv")
+        else:
+            st.warning("데이터를 입력해주세요.")
 
 # =========================
-# 📈 전문 그래프 분석 (CPK 포함)
+# 📈 그래프 분석 (엑셀 이미지 삽입 및 서식 추가)
 # =========================
-elif menu == "📈 전문 그래프 분석 (CPK)":
-    st.subheader("📈 품질 통계 분석 및 CPK 리포트")
-    
-    uploaded_file = st.file_uploader("분석할 파일을 업로드하세요 (XLSX, CSV)", type=["xlsx", "csv"])
-    
+elif menu == "📈 그래프 분석":
+    st.subheader("📈 품질 그래프 분석")
+
+    uploaded_file = st.file_uploader("엑셀 또는 CSV 파일 업로드", type=["xlsx", "csv"])
+
+    # 템플릿 다운로드
+    template = pd.DataFrame({"MIN": [30.1], "MAX": [30.7], "VALUE": [30.3]})
+    tmp_out = BytesIO()
+    with pd.ExcelWriter(tmp_out, engine="openpyxl") as writer:
+        template.to_excel(writer, index=False)
+    st.download_button("📄 템플릿 다운로드", tmp_out.getvalue(), "template.xlsx")
+
     if uploaded_file:
         df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
-        
-        # 기본 계산
         df["판정"] = df.apply(lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG", axis=1)
         df["편차"] = df.apply(lambda x: max(x["VALUE"] - x["MAX"], x["MIN"] - x["VALUE"], 0), axis=1)
-        
-        # CPK 계산 로직
-        usl, lsl = df["MAX"].iloc[0], df["MIN"].iloc[0]
-        mean = df["VALUE"].mean()
-        std = df["VALUE"].std()
-        
-        cp = (usl - lsl) / (6 * std) if std != 0 else 0
-        cpu = (usl - mean) / (3 * std) if std != 0 else 0
-        cpl = (mean - lsl) / (3 * std) if std != 0 else 0
-        cpk = min(cpu, cpl)
 
-        # 📊 그래프 시각화
+        # 화면 표시용 NG 강조
+        def highlight_ng(row):
+            return ['background-color: #ffcccc' if row["판정"] == "NG" else '' for _ in row]
+        st.dataframe(df.style.apply(highlight_ng, axis=1), use_container_width=True)
+
+        # 📊 그래프 생성
         fig, ax = plt.subplots(figsize=(12, 5))
-        ax.plot(df["VALUE"], marker='o', markersize=4, color='#1f77b4', label="측정값", alpha=0.7)
-        ax.axhline(usl, color='red', linestyle='--', label=f"USL (MAX): {usl}")
-        ax.axhline(lsl, color='orange', linestyle='--', label=f"LSL (MIN): {lsl}")
-        ax.axhline(mean, color='green', linestyle='-', alpha=0.5, label=f"AVG: {mean:.4f}")
-        
-        # NG 포인트 강조
-        ng_data = df[df["판정"] == "NG"]
-        ax.scatter(ng_data.index, ng_data["VALUE"], color='red', s=50, zorder=5, label="NG 지점")
-        
-        ax.set_title(f"Quality Analysis (CPK: {cpk:.3f})", fontsize=15)
-        ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
-        ax.grid(True, linestyle=':', alpha=0.5)
-        st.pyplot(fig)
-        
-        # 핵심 요약 지표 (Metric)
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("전체 샘플수", f"{len(df)}개")
-        m2.metric("불량 개수(NG)", f"{len(ng_data)}개", delta=len(ng_data), delta_color="inverse")
-        m3.metric("평균값 (AVG)", f"{mean:.4f}")
-        m4.metric("공정능력 (CPK)", f"{cpk:.3f}")
+        ax.plot(df["VALUE"], marker='o', markersize=4, label="VALUE", zorder=3, alpha=0.8)
+        ax.axhline(y=df["MAX"].iloc[0], color='green', linestyle='--', alpha=0.6, label="MAX")
+        ax.axhline(y=df["MIN"].iloc[0], color='orange', linestyle='--', alpha=0.6, label="MIN")
 
-        # 📄 엑셀 다운로드 (이미지 + 서식)
+        worst_idx = df["편차"].idxmax()
+        worst_row = df.loc[worst_idx]
+        ng_points = df[df["판정"] == "NG"]
+        ax.scatter(ng_points.index, ng_points["VALUE"], color='red', s=40, zorder=4)
+
+        if worst_row["편차"] > 0:
+            ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', s=450, linewidths=2.5, zorder=5)
+
+        ax.text(len(df)-1, df["MAX"].iloc[-1], f"MAX: {df['MAX'].iloc[-1]:.3f}", color='green', ha='right', fontweight='bold')
+        ax.text(len(df)-1, df["MIN"].iloc[-1], f"MIN: {df['MIN'].iloc[-1]:.3f}", color='orange', ha='right', fontweight='bold')
+        ax.set_title("Quality Trend Analysis")
+        ax.legend(loc='lower left')
+        ax.grid(True, linestyle=':', alpha=0.4)
+        
+        st.pyplot(fig)
+
+        # 그래프 이미지 버퍼 저장
         img_buffer = BytesIO()
         fig.savefig(img_buffer, format='png', bbox_inches='tight')
-        
+
+        # 📄 [수정] 결과 엑셀 저장 (이미지 포함 + NG 색상 적용)
         excel_out = BytesIO()
         with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='분석결과')
-            workbook = writer.book
-            worksheet = writer.sheets['분석결과']
+            df.to_excel(writer, index=False, sheet_name='Result')
             
-            # 서식 설정
-            ng_format = workbook.add_format({'bg_color': '#FFCCCC', 'font_color': '#9C0006'})
-            stat_format = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'border': 1})
+            workbook  = writer.book
+            worksheet = writer.sheets['Result']
             
-            # NG 행 강조
+            # NG 행 빨간색 포맷 정의
+            red_format = workbook.add_format({'bg_color': '#FFCCCC', 'font_color': '#9C0006'})
+            
+            # 데이터 범위에 조건부 서식 적용 ($D:$D는 판정 열 위치에 따라 조정 필요, 여기서는 4번째 열인 '판정' 기준)
+            # 데이터 행(1번행부터 마지막행까지)을 순회하며 NG인 경우 색상 적용
             for row_num in range(1, len(df) + 1):
-                if df.iloc[row_num-1]["판정"] == "NG":
-                    worksheet.set_row(row_num, None, ng_format)
-            
-            # 통계 정보 추가
-            worksheet.write('H2', '공정통계분석', stat_format)
-            worksheet.write('H3', f'평균: {mean:.4f}')
-            worksheet.write('H4', f'표준편차: {std:.4f}')
-            worksheet.write('H5', f'CPK: {cpk:.3f}')
-            
-            # 이미지 삽입
-            worksheet.insert_image('H7', 'graph.png', {'image_data': img_buffer, 'x_scale': 0.7, 'y_scale': 0.7})
+                judgment = df.iloc[row_num-1]["판정"]
+                if judgment == "NG":
+                    worksheet.set_row(row_num, None, red_format)
 
-        st.download_button("📂 전문 품질 리포트(Excel) 다운로드", excel_out.getvalue(), "Quality_Master_Report.xlsx")
+            # 그래프 이미지 삽입 (데이터 옆 G2 위치쯤에 삽입)
+            worksheet.insert_image('H2', 'graph.png', {'image_data': img_buffer, 'x_scale': 0.6, 'y_scale': 0.6})
+
+        st.download_button("📄 결과 엑셀 다운로드 (이미지 포함)", excel_out.getvalue(), "quality_report.xlsx")
+
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("### 📋 검사 결과 요약")
+            total, ng = len(df), len(df[df["판정"] == "NG"])
+            st.write(f"• 전체 샘플: {total}개 / **불량: {ng}개**")
+            if ng == 0: st.success("✅ 판정: 모든 데이터 규격 만족")
+            else: st.error(f"🚨 판정: 규격 이탈 발생")
+        with col2:
+            st.markdown("### 📍 Worst Point")
+            if worst_row["편차"] > 0:
+                st.error(f"**최대 편차: {worst_row['VALUE']:.4f}** (Index: {worst_idx})")
+            else:
+                st.info("Worst 포인트 없음 (전체 양호)")
 
 # =========================
-# 🧮 정밀 공차 계산기 (업그레이드)
+# 🧮 계산기
 # =========================
-elif menu == "🧮 정밀 공차 계산기":
-    st.subheader("🧮 상하한 분리형 정밀 판정기")
-    
-    with st.container():
-        c1, c2, c3, c4 = st.columns(4)
-        target = c1.number_input("기준값 (Target)", value=0.0, format="%.4f")
-        u_tol = c2.number_input("상한공차 (+)", value=0.0, format="%.4f")
-        l_tol = c3.number_input("하한공차 (-)", value=0.0, format="%.4f")
-        val = c4.number_input("현재 측정값", value=0.0, format="%.4f")
+elif menu == "🧮 계산기":
+    st.subheader("🧮 품질 보조 계산기")
+    calc = st.selectbox("기능 선택", ["토크 변환", "합계/평균", "공차 판정"])
+
+    if calc == "토크 변환":
+        val = st.number_input("수치 입력", 0.0)
+        mode = st.selectbox("변환 선택", ["N·m → kgf·m", "kgf·m → N·m"])
+        if mode == "N·m → kgf·m": st.success(f"결과: {val * 0.101972:.4f} kgf·m")
+        else: st.success(f"결과: {val * 9.80665:.4f} N·m")
+
+    elif calc == "합계/평균":
+        nums = st.text_input("값 입력 (쉼표 구분)", "10, 20, 30")
+        try:
+            vals = [float(x.strip()) for x in nums.split(",") if x.strip()]
+            if vals: st.info(f"합계: {sum(vals):.2f} / 평균: {sum(vals)/len(vals):.2f}")
+        except: st.error("입력 형식을 확인하세요.")
+
+    elif calc == "공차 판정":
+        st.info("기준값 대비 상한(+) 공차와 하한(-) 공차를 각각 입력하여 판정합니다.")
+        col1, col2, col3, col4 = st.columns(4)
+        target = col1.number_input("기준값 (Target)", value=0.0, format="%.4f")
+        upper_tol = col2.number_input("상한공차 (+)", value=0.0, format="%.4f")
+        lower_tol = col3.number_input("하한공차 (-)", value=0.0, format="%.4f")
+        measure = col4.number_input("측정값 (Value)", value=0.0, format="%.4f")
         
-        max_limit = target + abs(u_tol)
-        min_limit = target - abs(l_tol)
+        # 합격 범위 계산 (절대값 처리를 통해 부호 실수 방지)
+        min_limit = target - abs(lower_tol)
+        max_limit = target + abs(upper_tol)
         
         st.markdown("---")
-        res_col1, res_col2 = st.columns([1, 1])
-        
-        if min_limit <= val <= max_limit:
-            res_col1.success(f"## 판정: OK")
-            res_col2.info(f"규격 범위: {min_limit:.4f} ~ {max_limit:.4f}")
-        else:
-            res_col1.error(f"## 판정: NG")
-            diff = val - max_limit if val > max_limit else val - min_limit
-            res_col2.warning(f"이탈 수치: {diff:.4f}\n\n규격 범위: {min_limit:.4f} ~ {max_limit:.4f}")
+        res_col1, res_col2 = st.columns(2)
+        with res_col1:
+            st.write(f"**규격 범위:** {min_limit:.4f} ~ {max_limit:.4f}")
+            if min_limit <= measure <= max_limit:
+                st.success(f"### 판정 결과: OK ✅")
+            else:
+                st.error(f"### 판정 결과: NG 🚨")
+        with res_col2:
+            if measure > max_limit:
+                st.warning(f"상한 초과: +{measure - max_limit:.4f}")
+            elif measure < min_limit:
+                st.warning(f"하한 미달: -{min_limit - measure:.4f}")
+            else:
+                st.info("규격 이내 안정적")
