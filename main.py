@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from io import BytesIO
 
 # --- 1. 페이지 설정 및 디자인 ---
-st.set_page_config(page_title="품질 통합 분석 시스템 v6.7", layout="wide")
+st.set_page_config(page_title="품질 통합 분석 시스템 v6.8", layout="wide")
 
 st.markdown("""
     <style>
@@ -13,7 +13,6 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #1e293b !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
     
-    /* 사이드바 리셋 버튼 */
     [data-testid="stSidebar"] div.stButton > button {
         background-color: #ef4444 !important;
         color: white !important;
@@ -25,7 +24,6 @@ st.markdown("""
     
     .stBox { background-color: #ffffff; padding: 24px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 24px; }
     .summary-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 2px solid #3b82f6; margin-top: 20px; }
-    .report-text { font-size: 1.1em; line-height: 1.8; color: #1e293b; white-space: pre-wrap; font-family: 'Malgun Gothic', sans-serif; }
     .ok-text { color: #10b981; font-weight: bold; }
     .ng-text { color: #e11d48; font-weight: bold; }
     
@@ -36,7 +34,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 초기화 로직 ---
 if 'reset_key' not in st.session_state: st.session_state.reset_key = 0
 
 def full_reset():
@@ -67,25 +64,18 @@ if menu == "🔄 데이터 변환기":
             x, y, z = str(row.get("X","")).strip(), str(row.get("Y","")).strip(), str(row.get("Z","")).strip()
             if x and y and z: results.extend([z, x, y])
         if results:
-            res_df = pd.DataFrame(results, columns=["변환 결과"])
-            st.session_state.trans_res = res_df
+            st.session_state.trans_res = pd.DataFrame(results, columns=["변환 결과"])
 
     if "trans_res" in st.session_state:
         st.dataframe(st.session_state.trans_res, use_container_width=True)
-        st.download_button("📂 CSV 다운로드", st.session_state.trans_res.to_csv(index=False).encode('utf-8-sig'), "converted_data.csv", use_container_width=True)
+        st.download_button("📂 CSV 다운로드", st.session_state.trans_res.to_csv(index=False).encode('utf-8-sig'), "converted_data.csv")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --- [메뉴 2] 멀티 캐비티 분석 ---
 elif menu == "📈 멀티 캐비티 분석":
     st.title("📊 핀 높이 멀티 캐비티 통합 분석")
     
-    def get_cavity_template():
-        df_temp = pd.DataFrame({"Point": list(range(1, 11)), "SPEC_MIN": [30.03]*10, "SPEC_MAX": [30.38]*10, "Cavity_1": [30.2]*10, "Cavity_2": [30.22]*10})
-        out = BytesIO()
-        with pd.ExcelWriter(out, engine='xlsxwriter') as writer: df_temp.to_excel(writer, index=False); return out.getvalue()
-
     col_file, col_temp = st.columns([3, 1])
-    with col_temp: st.download_button("📄 템플릿 받기", get_cavity_template(), "Template.xlsx", use_container_width=True)
     with col_file: uploaded_file = st.file_uploader("분석 파일 업로드", type=["xlsx", "csv"], key=f"cav_{st.session_state.reset_key}")
 
     if uploaded_file:
@@ -95,16 +85,15 @@ elif menu == "📈 멀티 캐비티 분석":
         y_range = [float(np.nanmin(all_vals)) - 0.02, float(np.nanmax(all_vals)) + 0.02]
         cav_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd']
 
-        # 요약 카드
-        summary_results = []
+        # 요약 카드 대시보드
         d_cols = st.columns(len(cav_cols))
         for i, cav in enumerate(cav_cols):
             df[f"{cav}_판정"] = df.apply(lambda x: "OK" if x["SPEC_MIN"] <= x[cav] <= x["SPEC_MAX"] else "NG", axis=1)
             ng_c = len(df[df[f"{cav}_판정"]=="NG"])
             rate = ((len(df)-ng_c)/len(df))*100
             d_cols[i].markdown(f'<div class="summary-card" style="border-top-color: {cav_colors[i%4]};"><b>{cav}</b><br><span class="{"ok-text" if rate==100 else "ng-text"}" style="font-size:1.6em;">{rate:.1f}%</span><br><small>NG: {ng_c} EA</small></div>', unsafe_allow_html=True)
-            summary_results.append({"cav": cav, "ng": ng_c, "total": len(df), "color": cav_colors[i%4]})
 
+        # 개별 그래프
         st.subheader("🔍 캐비티별 상세 분포")
         c_grid = st.columns(2)
         for i, cav in enumerate(cav_cols):
@@ -119,9 +108,9 @@ elif menu == "📈 멀티 캐비티 분석":
                 st.plotly_chart(fig, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # 통합 트렌드
+        # [복구] 통합 트렌드
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
-        st.subheader("🌐 통합 경향성")
+        st.subheader("🌐 통합 경향성 분석")
         fig_total = go.Figure()
         df['Avg'] = df[cav_cols].mean(axis=1)
         fig_total.add_trace(go.Scatter(x=df["Point"], y=df["SPEC_MIN"], name="MIN", line=dict(color="blue", dash="dot")))
@@ -133,19 +122,17 @@ elif menu == "📈 멀티 캐비티 분석":
         st.plotly_chart(fig_total, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# --- [메뉴 3] 위치도 분석 (과녁 시각화 복구) ---
+# --- [메뉴 3] 위치도 분석 (에러 해결 & 과녁 복구) ---
 elif menu == "🎯 위치도(MMC) 분석":
     st.title("🎯 위치도 정밀 분석 시스템")
     
     with st.expander("📂 데이터 입력", expanded=True):
         c1, c2 = st.columns([1, 2])
-        with c1:
-            mmc_val = st.number_input("MMC 기준값", value=0.500, format="%.3f")
-        with c2:
-            file = st.file_uploader("엑셀 업로드", type=["xlsx"], key=f"mmc_up_{st.session_state.reset_key}")
+        with c1: mmc_val = st.number_input("MMC 기준값", value=0.500, format="%.3f")
+        with c2: file = st.file_uploader("엑셀 업로드", type=["xlsx"], key=f"mmc_up_{st.session_state.reset_key}")
 
     if file: df_m = pd.read_excel(file)
-    else: # 샘플 데이터
+    else:
         df_m = pd.DataFrame({"측정포인트": [1, 2, 3, 4, 5, 6, 7, 8], "기본공차": [0.30] * 8, "도면치수_X": [-55.7, -35.8, -14.8, 5.1, -45.5, -5.1, -55.7, 5.1], "도면치수_Y": [-38.8, -38.8, -38.8, -38.8, -54.7, -54.7, -70.3, -70.3], "측정치_X": [-55.71, -35.79, -14.81, 5.10, -45.52, -5.09, -55.74, 5.11], "측정치_Y": [-38.82, -38.80, -38.79, -38.81, -54.72, -54.68, -70.32, -70.31], "실측지름_MMC용": [0.55, 0.52, 0.53, 0.55, 0.51, 0.50, 0.56, 0.54]})
 
     df_m['X편차'] = df_m['측정치_X'] - df_m['도면치수_X']
@@ -156,21 +143,15 @@ elif menu == "🎯 위치도(MMC) 분석":
 
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
     fig_m = go.Figure()
-    
-    # 정원 유지 및 축 폰트 강화
     fig_m.update_yaxes(scaleanchor="x", scaleratio=1, zeroline=True, zerolinewidth=2, zerolinecolor='black', tickfont=dict(size=15, color="black"))
     fig_m.update_xaxes(zeroline=True, zerolinewidth=2, zerolinecolor='black', tickfont=dict(size=15, color="black"))
     
-    # [복구] 과녁 구분선 (원형 가이드)
+    # [복구] 과녁 컬러 가이드
     max_t = df_m['최종공차'].max() / 2
-    # 1. 중심 가이드 (Blue)
     fig_m.add_shape(type="circle", x0=-0.05, y0=-0.05, x1=0.05, y1=0.05, line=dict(color="Blue", width=1, dash="dot"))
-    # 2. 합격 공차선 (Purple)
     fig_m.add_shape(type="circle", x0=-max_t, y0=-max_t, x1=max_t, y1=max_t, line=dict(color="Purple", width=3), fillcolor="rgba(147, 112, 219, 0.1)")
-    # 3. 한계 경고선 (Red)
     fig_m.add_shape(type="circle", x0=-(max_t+0.05), y0=-(max_t+0.05), x1=(max_t+0.05), y1=(max_t+0.05), line=dict(color="Red", width=1.5, dash="dashdot"))
     
-    # 포인트 플로팅
     for _, row in df_m.iterrows():
         p_c = '#10b981' if row['판정'] == "OK" else '#ef4444'
         fig_m.add_trace(go.Scatter(x=[row['X편차']], y=[row['Y편차']], mode='markers+text', 
@@ -178,17 +159,16 @@ elif menu == "🎯 위치도(MMC) 분석":
                                    textfont=dict(size=16, color="black"),
                                    marker=dict(size=14, color=p_c, line=dict(width=1, color='white'))))
     
-    fig_m.update_layout(title="🎯 위치도 분석 과녁 (색상 구분선 복구)", width=750, height=750, template="plotly_white", showlegend=False)
+    fig_m.update_layout(title="🎯 위치도 분석 과녁 (색상 복구 완료)", width=700, height=700, template="plotly_white", showlegend=False)
     st.plotly_chart(fig_m, use_container_width=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 데이터 테이블 판정 색상 복구
+    # [에러수정] applymap -> map으로 변경
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    st.subheader("📋 상세 데이터 시트")
+    st.subheader("📋 상세 분석 데이터")
     def color_ok_ng(val):
-        color = '#d1fae5' if val == 'OK' else '#fee2e2'
-        return f'background-color: {color}'
-    st.dataframe(df_m.style.applymap(color_ok_ng, subset=['판정']), use_container_width=True)
+        return 'background-color: #d1fae5' if val == 'OK' else 'background-color: #fee2e2'
+    st.dataframe(df_m.style.map(color_ok_ng, subset=['판정']), use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --- [메뉴 4] 품질 계산기 ---
@@ -200,7 +180,7 @@ elif menu == "🧮 품질 계산기":
     with t[0]:
         c1, c2 = st.columns(2)
         type_m = c1.radio("대상", ["구멍", "축"])
-        geo_m = c2.number_input("도면 기하공차", value=0.05)
+        geo_m = c2.number_input("기본 기하공차", value=0.05)
         mmc_s, act_s = st.number_input("MMC 규격", value=10.0), st.number_input("실측치", value=10.02)
         bonus = max(0.0, act_s - mmc_s if "구멍" in type_m else mmc_s - act_s)
         st.metric("최종 허용 공차", f"{geo_m + bonus:.4f}")
@@ -228,6 +208,8 @@ elif menu == "🧮 품질 계산기":
     with t[3]:
         raw = st.text_area("데이터 (쉼표 구분)")
         if raw:
-            ns = [float(x.strip()) for x in raw.split(",") if x.strip()]
-            st.write(f"평균: {np.mean(ns):.4f} | R: {np.ptp(ns):.4f} | σ: {np.std(ns):.4f}")
+            try:
+                ns = [float(x.strip()) for x in raw.split(",") if x.strip()]
+                st.write(f"평균: {np.mean(ns):.4f} | σ: {np.std(ns):.4f}")
+            except: st.error("숫자 형식이 아닙니다.")
     st.markdown('</div>', unsafe_allow_html=True)
