@@ -304,20 +304,23 @@ def run_quality_calculator():
 # ==========================================
 # 3. 메인 프로그램 제어 (Main Loop)
 # ==========================================
-
 def main():
-    if 'reset_key' not in st.session_state: st.session_state.reset_key = 0
-    if 'data' not in st.session_state: st.session_state.data = None
+    # 1. 세션 상태 초기화 (데이터 및 리셋 키)
+    if 'reset_key' not in st.session_state:
+        st.session_state.reset_key = 0
+    if 'data' not in st.session_state:
+        st.session_state.data = None
 
+    # 전역 스타일 적용
     set_global_style()
     
+    # 2. 사이드바 메뉴 (불필요한 설명을 제거하여 깔끔하게 구성)
     st.sidebar.title("💎 QUALITY HUB v9.5")
     
-    # 상위 메뉴를 크게 분류
     menu = st.sidebar.radio(
         "📂 분석 카테고리", 
         [
-            "🎯 위치도 정밀 분석",  # 하위 메뉴를 포함한 큰 폴더
+            "🎯 위치도 정밀 분석",    # 하위 메뉴(탭) 포함
             "📈 멀티 캐비티 분석",
             "📐 XYZ 좌표 변환기",
             "🧮 품질 통합 계산기"
@@ -326,29 +329,49 @@ def main():
     )
     
     st.sidebar.markdown("---")
+    
+    # 데이터 초기화 버튼
     if st.sidebar.button("🗑️ 모든 데이터 리셋"):
-        st.session_state.reset_key += 1; st.session_state.data = None; st.rerun()
+        st.session_state.reset_key += 1
+        st.session_state.data = None
+        st.rerun()
 
-    # --- 페이지 본문 제어 ---
+    # 3. 선택된 메뉴에 따른 본문 출력
     if menu == "🎯 위치도 정밀 분석":
-        st.subheader("🎯 위치도 정밀 분석 시스템")
-        # 탭을 사용하여 '하위 폴더' 기능을 구현합니다.
-        tab_convert, tab_analysis = st.tabs(["Step 1. 성적서 데이터 변환", "Step 2. 위치도 결과 분석"])
+        st.title("🎯 위치도 정밀 분석 시스템")
+        st.caption("📍 성적서 데이터를 변환한 후, MMC 기반의 위치도 합불 판정을 수행합니다.")
+        
+        # --- 하위 폴더(탭) 구조 구현 ---
+        tab_convert, tab_analysis = st.tabs([
+            "📁 Step 1. 성적서 데이터 변환", 
+            "📊 Step 2. 위치도 결과 분석"
+        ])
         
         with tab_convert:
-            run_data_converter() # 성적서 복사 붙여넣는 곳
+            # 1번 메뉴였던 성적서 변환기를 이곳으로 배치
+            run_data_converter()
             
         with tab_analysis:
-            run_position_analysis() # 변환된 데이터로 차트 보는 곳
+            # 변환된 데이터가 있을 때만 분석 화면 표시
+            if st.session_state.data is not None:
+                run_position_analysis()
+            else:
+                st.info("💡 'Step 1' 탭에서 데이터를 먼저 변환하거나 저장해 주세요.")
+                # 예시를 위해 템플릿 다운로드 버튼이라도 보여주고 싶다면 아래 함수 실행
+                # run_position_analysis() # 데이터 없을 때 내부 처리가 되어있다면 바로 호출 가능
 
     elif menu == "📈 멀티 캐비티 분석":
+        st.caption("📍 핀 높이 등 여러 캐비티의 통합 데이터 트렌드를 분석합니다.")
         run_cavity_analysis()
         
     elif menu == "📐 XYZ 좌표 변환기":
+        st.caption("📍 수동 좌표 입력 및 Z축 오프셋(Offset) 연산을 지원합니다.")
         run_xyz_transformer()
         
     elif menu == "🧮 품질 통합 계산기":
+        st.caption("📍 단위 환산, 토크 변환 등 공정 필수 계산 도구 모음입니다.")
         run_quality_calculator()
 
+# 프로그램 실행
 if __name__ == "__main__":
     main()
