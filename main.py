@@ -304,6 +304,9 @@ def run_quality_calculator():
 # ==========================================
 # 3. 메인 프로그램 제어 (Main Loop)
 # ==========================================
+# ==========================================
+# 3. 메인 프로그램 제어 (Main Loop)
+# ==========================================
 def main():
     # 1. 무조건 최상단에서 변수 존재 여부를 확인하고 없으면 만듭니다.
     if 'reset_key' not in st.session_state:
@@ -313,39 +316,39 @@ def main():
 
     set_global_style()
     
-    # 2. 사이드바 메뉴 설정 (reset_key가 확실히 있으므로 에러 안 남)
+    # 2. 사이드바 메뉴 설정
     st.sidebar.title("💎 품질 플랫폼 v9.5")
     
-    # 초기화 버튼을 누르면 이 key 값이 바뀌면서 메뉴가 리셋됩니다.
+    # 업무 흐름에 맞게 메뉴 순서 및 명칭 변경
     menu = st.sidebar.radio(
         "📋 업무 선택", 
         [
-            "📑 성적서 자동 변환",  # 이름 변경
-            "📐 XYZ 좌표 변환",    # 신규 추가
-            "📈 멀티 캐비티 분석", 
-            "🎯 위치도(MMC) 분석", 
-            "🧮 품질 계산기"
+            "📑 성적서 자동 변환 (위치도 사용 전)",  # 1순위: 성적서 복사용
+            "📐 XYZ 좌표 변환 (수동 입력/Z축)",      # 2순위: 개별 좌표 변환용
+            "🎯 위치도(MMC) 분석",                 # 3순위: 위 두 메뉴의 결과 분석
+            "📈 멀티 캐비티 분석",                  # 4순위: 핀 높이 등 트렌드
+            "🧮 품질 계산기"                        # 5순위: 단순 계산 도구
         ], 
         key=f"m_{st.session_state.reset_key}"
     )
     
     st.sidebar.markdown("---")
     
-    # 3. 데이터 초기화 버튼 (사이드바 하단에 배치 권장)
+    # 3. 데이터 초기화 버튼
     if st.sidebar.button("🗑️ 데이터 초기화"):
         st.session_state.reset_key += 1
         st.session_state.data = None
         st.rerun()
 
-    # 4. 선택된 메뉴에 따른 화면 출력
-    if menu == "📑 성적서 자동 변환":
+    # 4. 선택된 메뉴에 따른 화면 출력 (메뉴 명칭과 일치하도록 수정)
+    if menu == "📑 성적서 자동 변환 (위치도 사용 전)":
         run_data_converter()
-    elif menu == "📐 XYZ 좌표 변환":
-        run_xyz_transformer()  # 아래에서 새로 만들 함수
-    elif menu == "📈 멀티 캐비티 분석":
-        run_cavity_analysis()
+    elif menu == "📐 XYZ 좌표 변환 (수동 입력/Z축)":
+        run_xyz_transformer()
     elif menu == "🎯 위치도(MMC) 분석":
         run_position_analysis()
+    elif menu == "📈 멀티 캐비티 분석":
+        run_cavity_analysis()
     elif menu == "🧮 품질 계산기":
         run_quality_calculator()
 
