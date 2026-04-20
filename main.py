@@ -4,178 +4,136 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 
 # 1. 페이지 설정
-st.set_page_config(page_title="품질 측정 통합 프로그램", layout="wide")
+st.set_page_config(page_title="정밀측정실 품질 분석 시스템", layout="wide")
 
-# 2. 그래프 폰트 설정 (그래프 내부 글자 깨짐 방지를 위해 영문 기본 폰트 사용)
+# 2. 그래프 폰트 설정 (영문 사용으로 깨짐 방지)
 plt.rcParams['axes.unicode_minus'] = False
 plt.rc('font', family='sans-serif') 
 
-# 3. 사이드바 스타일
-st.markdown("""
-<style>
-[data-testid="stSidebar"] { background-color: #0E1117; }
-[data-testid="stSidebar"] * { color: white; }
-</style>
-""", unsafe_allow_html=True)
+st.title("📊 품질 측정 통합 프로그램 (전치수/개발품 대응)")
 
-st.title("📊 품질 측정 통합 프로그램")
-
-menu = st.sidebar.radio(
-    "메뉴 선택",
-    ["🔄 ZXY 변환", "📈 그래프 분석", "🧮 계산기"]
-)
+menu = st.sidebar.radio("메뉴 선택", ["🔄 ZXY 변환", "📈 그래프 분석", "🧮 계산기"])
 
 # =========================
-# 🔄 ZXY 변환 (기본 세로 쌓기 로직)
+# 🔄 ZXY 변환 (세로 쌓기 로직 유지)
 # =========================
 if menu == "🔄 ZXY 변환":
     st.subheader("🔄 ZXY 데이터 변환")
-    st.info("X, Y, Z를 입력하면 [Z -> X -> Y] 순서로 데이터가 세로로 쌓여 결과가 생성됩니다.")
+    st.info("X, Y, Z 데이터를 [Z -> X -> Y] 순서의 세로형 리스트로 변환합니다.")
 
     if "df_zxy" not in st.session_state:
-        st.session_state.df_zxy = pd.DataFrame({
-            "X": [""] * 100,
-            "Y": [""] * 100,
-            "Z": [""] * 100,
-        })
-
-    edited_df = st.data_editor(
-        st.session_state.df_zxy,
-        use_container_width=True,
-        num_rows="dynamic"
-    )
-
+        st.session_state.df_zxy = pd.DataFrame({"X": [""] * 10, "Y": [""] * 10, "Z": [""] * 10})
+    
+    edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic")
+    
     if st.button("ZXY 결과 생성"):
         results = []
         for _, row in edited_df.iterrows():
-            x, y, z = str(row["X"]).strip(), str(row["Y"]).strip(), str(row["Z"]).strip()
-            if x and y and z:
-                results.extend([z, x, y]) # 세로 쌓기 방식
-
+            if str(row["X"]).strip() and str(row["Y"]).strip() and str(row["Z"]).strip():
+                results.extend([row["Z"], row["X"], row["Y"]])
+        
         if results:
-            result_df = pd.DataFrame(results, columns=["변환 결과"])
-            st.dataframe(result_df, use_container_width=True)
-            csv = result_df.to_csv(index=False).encode("utf-8-sig")
+            res_df = pd.DataFrame(results, columns=["변환 결과"])
+            st.dataframe(res_df, use_container_width=True)
+            csv = res_df.to_csv(index=False).encode("utf-8-sig")
             st.download_button("📂 CSV 다운로드", csv, "zxy_result.csv")
-        else:
-            st.warning("데이터를 입력해주세요.")
 
 # =========================
-# 📈 그래프 분석 (Worst 정보 하단 이동 및 시인성 개선)
+# 📈 그래프 분석 (그룹화 및 Worst 시인성 개선)
 # =========================
 elif menu == "📈 그래프 분석":
     st.subheader("📈 품질 그래프 분석")
-
-    uploaded_file = st.file_uploader("엑셀 또는 CSV 파일 업로드", type=["xlsx", "csv"])
-
-    # 템플릿 다운로드
-    template = pd.DataFrame({"MIN": [30.1], "MAX": [30.7], "VALUE": [30.3]})
-    tmp_out = BytesIO()
-    with pd.ExcelWriter(tmp_out, engine="openpyxl") as writer:
-        template.to_excel(writer, index=False)
-    st.download_button("📄 템플릿 다운로드", tmp_out.getvalue(), "template.xlsx")
+    uploaded_file = st.file_uploader("데이터 파일 업로드 (TYPE 열 포함 권장)", type=["xlsx", "csv"])
 
     if uploaded_file:
         df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
-        df["판정"] = df.apply(lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG", axis=1)
-        df["편차"] = df.apply(lambda x: max(x["VALUE"] - x["MAX"], x["MIN"] - x["VALUE"], 0), axis=1)
+        
+        # [기능 추가] TYPE 열을 이용한 그룹화 필터
+        filtered_df = df.copy()
+        if "TYPE" in df.columns:
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🔍 항목 필터")
+            all_types = df["TYPE"].unique().tolist()
+            selected_types = st.sidebar.multiselect("분석할 항목 선택", options=all_types, default=all_types)
+            filtered_df = df[df["TYPE"].isin(selected_types)].reset_index(drop=True)
+        
+        if filtered_df.empty:
+            st.warning("선택된 데이터가 없습니다.")
+        else:
+            # 판정 및 편차 계산
+            filtered_df["판정"] = filtered_df.apply(lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG", axis=1)
+            filtered_df["편차"] = filtered_df.apply(lambda x: max(x["VALUE"] - x["MAX"], x["MIN"] - x["VALUE"], 0), axis=1)
 
-        # NG 강조 테이블
-        def highlight_ng(row):
-            return ['background-color: #ffcccc' if row["판정"] == "NG" else '' for _ in row]
-        st.dataframe(df.style.apply(highlight_ng, axis=1), use_container_width=True)
+            # NG 데이터 강조 테이블
+            st.dataframe(filtered_df.style.apply(lambda r: ['background-color: #ffcccc' if r["판정"] == "NG" else ''] * len(r), axis=1), use_container_width=True)
 
-        # 📊 그래프 생성
-        fig, ax = plt.subplots(figsize=(12, 5))
-        ax.plot(df["VALUE"], marker='o', markersize=4, label="VALUE", zorder=3, alpha=0.8)
-        ax.axhline(y=df["MAX"].iloc[0], color='green', linestyle='--', alpha=0.6, label="MAX")
-        ax.axhline(y=df["MIN"].iloc[0], color='orange', linestyle='--', alpha=0.6, label="MIN")
+            # 📊 그래프 생성
+            fig, ax = plt.subplots(figsize=(12, 5))
+            ax.plot(filtered_df["VALUE"], marker='o', markersize=4, label="VALUE", zorder=3, alpha=0.8)
+            ax.plot(filtered_df["MAX"], color='green', linestyle='--', label="MAX", alpha=0.5)
+            ax.plot(filtered_df["MIN"], color='orange', linestyle='--', label="MIN", alpha=0.5)
 
-        # NG 및 Worst 강조
-        worst_idx = df["편차"].idxmax()
-        worst_row = df.loc[worst_idx]
-
-        ng_points = df[df["판정"] == "NG"]
-        ax.scatter(ng_points.index, ng_points["VALUE"], color='red', s=40, zorder=4)
-
-        # 🔥 [개선] 그래프에는 이중 원으로 위치만 강조 (글자 제거)
-        if worst_row["편차"] > 0:
-            ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', 
-                       s=450, linewidths=2.5, zorder=5)
-            ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', 
-                       s=200, linewidths=1.5, zorder=5, alpha=0.5)
-
-        # 수치 레이블
-        ax.text(len(df)-1, df["MAX"].iloc[-1], f"MAX: {df['MAX'].iloc[-1]:.3f}", color='green', ha='right', fontweight='bold')
-        ax.text(len(df)-1, df["MIN"].iloc[-1], f"MIN: {df['MIN'].iloc[-1]:.3f}", color='orange', ha='right', fontweight='bold')
-
-        ax.set_title("Quality Trend Analysis (Worst Point Highlighted)")
-        ax.set_xlabel("Sample Index")
-        ax.set_ylabel("Value")
-        ax.legend(loc='lower left')
-        ax.grid(True, linestyle=':', alpha=0.4)
-        st.pyplot(fig)
-
-        # 이미지 다운로드
-        img_buffer = BytesIO()
-        fig.savefig(img_buffer, format='png', bbox_inches='tight')
-        st.download_button("📸 그래프 이미지 저장", img_buffer.getvalue(), "quality_graph.png", "image/png")
-
-        # 🔥 [복구 및 개선] 검사 결과 및 Worst 상세 정보
-        st.markdown("---")
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("### 📋 검사 결과 요약")
-            total, ng = len(df), len(df[df["판정"] == "NG"])
-            st.write(f"• 전체 샘플: {total}개 / 양호: {total-ng}개 / **불량: {ng}개**")
-            if ng == 0: st.success("✅ 판정: 모든 데이터 규격 만족")
-            else: st.error(f"🚨 판정: 규격 이탈 발생 (NG {ng}건)")
-
-            # 평균 경향 분석
-            avg_val = df["VALUE"].mean()
-            if avg_val > df["MAX"].mean(): st.error("📉 경향: 전체적으로 상한값 초과 추세")
-            elif avg_val < df["MIN"].mean(): st.error("📈 경향: 전체적으로 하한값 미달 추세")
-            else: st.info("✔ 경향: 전체적인 분포가 규격 내 안정적임")
-
-        with col2:
-            st.markdown("### 📍 Worst Point 상세 정보")
+            # Worst 강조 (이중 원 시각화)
+            worst_idx = filtered_df["편차"].idxmax()
+            worst_row = filtered_df.loc[worst_idx]
+            
             if worst_row["편차"] > 0:
-                st.error(f"**최대 편차 측정값: {worst_row['VALUE']:.4f}**")
-                st.write(f"• 데이터 순번(Index): {worst_idx}")
-                st.write(f"• 규격 대비 편차량: {worst_row['편차']:.4f}")
-                st.write(f"• 판정: {worst_row['판정']}")
-            else:
-                st.info("Worst 포인트가 없습니다. (전체 양호)")
+                ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', s=450, linewidths=2.5, zorder=5)
+                ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', s=200, linewidths=1.5, zorder=5, alpha=0.5)
 
-        # 결과 엑셀 다운로드
-        excel_out = BytesIO()
-        with pd.ExcelWriter(excel_out, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-        st.download_button("📄 결과 엑셀 다운로드", excel_out.getvalue(), "quality_result.xlsx")
+            ax.set_title("Quality Trend Analysis")
+            ax.set_xlabel("Sample Index")
+            ax.set_ylabel("Value")
+            ax.legend(loc='lower left')
+            ax.grid(True, linestyle=':', alpha=0.4)
+            st.pyplot(fig)
+
+            # 하단 정보 섹션 (Worst 텍스트는 여기서 확인)
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("### 📋 분석 요약")
+                total, ng = len(filtered_df), len(filtered_df[filtered_df["판정"] == "NG"])
+                st.write(f"• 선택 항목 샘플: {total}개 / **불량(NG): {ng}개**")
+                if ng == 0: st.success("✅ 선택된 모든 치수가 규격 내에 있습니다.")
+                else: st.error(f"🚨 {ng}건의 규격 이탈이 확인되었습니다.")
+
+            with col2:
+                st.markdown("### 📍 Worst Point 정보")
+                if worst_row["편차"] > 0:
+                    st.error(f"**최대 편차 값: {worst_row['VALUE']:.4f}**")
+                    if "TYPE" in filtered_df.columns: st.write(f"• 해당 항목: {worst_row['TYPE']}")
+                    st.write(f"• 규격 대비 편차량: {worst_row['편차']:.4f}")
+                else:
+                    st.info("Worst 포인트가 없습니다 (전체 양호).")
+
+            # 결과 파일 다운로드
+            excel_out = BytesIO()
+            with pd.ExcelWriter(excel_out, engine='openpyxl') as writer:
+                filtered_df.to_excel(writer, index=False)
+            st.download_button("📄 분석 결과 엑셀 저장", excel_out.getvalue(), "quality_analysis.xlsx")
 
 # =========================
-# 🧮 계산기
+# 🧮 계산기 (기능 유지)
 # =========================
 elif menu == "🧮 계산기":
-    st.subheader("🧮 품질 보조 계산기")
-    calc = st.selectbox("기능 선택", ["토크 변환", "합계/평균", "공차 판정"])
-
+    st.subheader("🧮 보조 계산기")
+    calc = st.selectbox("기능 선택", ["토크 변환", "평균 계산", "공차 판정"])
+    
     if calc == "토크 변환":
-        val = st.number_input("수치 입력", 0.0)
-        mode = st.selectbox("변환 선택", ["N·m → kgf·m", "kgf·m → N·m"])
-        if mode == "N·m → kgf·m": st.success(f"결과: {val * 0.101972:.4f} kgf·m")
-        else: st.success(f"결과: {val * 9.80665:.4f} N·m")
-
-    elif calc == "합계/평균":
-        nums = st.text_input("값 입력 (쉼표 구분)", "10, 20, 30")
+        v = st.number_input("수치", 0.0)
+        m = st.selectbox("단위", ["N·m → kgf·m", "kgf·m → N·m"])
+        st.success(f"결과: {v * 0.101972:.4f}" if "kgf" in m else f"결과: {v * 9.80665:.4f}")
+    
+    elif calc == "평균 계산":
+        txt = st.text_input("값 입력 (쉼표 구분)", "10.1, 10.2, 10.5")
         try:
-            vals = [float(x.strip()) for x in nums.split(",") if x.strip()]
-            if vals: st.info(f"합계: {sum(vals):.2f} / 평균: {sum(vals)/len(vals):.2f}")
-        except: st.error("입력 형식을 확인하세요.")
+            vals = [float(x.strip()) for x in txt.split(",") if x.strip()]
+            if vals: st.info(f"평균값: {sum(vals)/len(vals):.4f}")
+        except: st.error("숫자 형식을 확인해주세요.")
 
     elif calc == "공차 판정":
-        col1, col2, col3 = st.columns(3)
-        t, tol, v = col1.number_input("기준값"), col2.number_input("공차(±)"), col3.number_input("측정값")
-        if t - tol <= v <= t + tol: st.success("결과: OK")
-        else: st.error("결과: NG")
+        c1, c2, c3 = st.columns(3)
+        t, tol, v = c1.number_input("기준값"), c2.number_input("공차±"), c3.number_input("측정값")
+        if t-tol <= v <= t+tol: st.success("판정: OK")
+        else: st.error("판정: NG")
