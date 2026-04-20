@@ -239,38 +239,38 @@ def run_quality_calculator():
 # 3. 메인 프로그램 제어 (Main Loop)
 # ==========================================
 def main():
+    # 1. 무조건 최상단에서 변수 존재 여부를 확인하고 없으면 만듭니다.
+    if 'reset_key' not in st.session_state:
+        st.session_state.reset_key = 0
+    if 'data' not in st.session_state:
+        st.session_state.data = None
+
     set_global_style()
     
-    # 1. 초기화 버튼 부분 수정
-    if st.button("🗑️ 데이터 초기화"):
-        # 이 아래 줄들은 모두 키보드 'Tab' 키를 한 번씩 눌러서 안으로 밀어넣어야 합니다.
-        if 'reset_key' not in st.session_state:
-            st.session_state.reset_key = 0  
-        
-        st.session_state.reset_key += 1
-        st.session_state.data = None
-        st.rerun()  # 여기까지가 버튼을 눌렀을 때 실행되는 구역입니다.
-    
+    # 2. 사이드바 메뉴 설정 (reset_key가 확실히 있으므로 에러 안 남)
     st.sidebar.title("💎 품질 플랫폼 v9.5")
-    menu = st.sidebar.radio("📋 업무 선택", 
-                            ["🔄 데이터 변환기", "📈 멀티 캐비티 분석", "🎯 위치도(MMC) 분석", "🧮 품질 계산기"], 
-                            key=f"m_{st.session_state.reset_key}")
+    
+    # 초기화 버튼을 누르면 이 key 값이 바뀌면서 메뉴가 리셋됩니다.
+    menu = st.sidebar.radio(
+        "📋 업무 선택", 
+        ["🔄 데이터 변환기", "📈 멀티 캐비티 분석", "🎯 위치도(MMC) 분석", "🧮 품질 계산기"], 
+        key=f"m_{st.session_state.reset_key}"
+    )
     
     st.sidebar.markdown("---")
-    if st.sidebar.button("🧹 모든 데이터 초기화"):
-        for key in list(st.session_state.keys()): del st.session_state[key]
+    
+    # 3. 데이터 초기화 버튼 (사이드바 하단에 배치 권장)
+    if st.sidebar.button("🗑️ 데이터 초기화"):
         st.session_state.reset_key += 1
+        st.session_state.data = None
         st.rerun()
 
-    # 메뉴 선택에 따른 함수 실행
+    # 4. 선택된 메뉴에 따른 화면 출력
     if menu == "🔄 데이터 변환기":
         run_data_converter()
     elif menu == "📈 멀티 캐비티 분석":
-        run_cavity_analysis()
+        run_multi_analysis()
     elif menu == "🎯 위치도(MMC) 분석":
         run_position_analysis()
     elif menu == "🧮 품질 계산기":
         run_quality_calculator()
-
-if __name__ == "__main__":
-    main()
