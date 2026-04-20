@@ -271,7 +271,7 @@ elif menu == "🧮 계산기":
    
 
     with tabs[3]:
-        u_i = st.selectbox("항목", ["mm/inch", "mm/μm", "kg/lb"], key="ui_v41")
+        u_i = st.selectbox("항목", ["mm -> inch", "mm -> μm", "kg -> lb"], key="ui_v41")
         u_v = st.number_input("수치", key="uv_v41")
         if "inch" in u_i: res, lab = u_v/25.4, "inch"
         elif "μm" in u_i: res, lab = u_v*1000, "μm"
