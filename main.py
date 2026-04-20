@@ -275,5 +275,5 @@ def main():
     elif menu == "🧮 품질 계산기":
         run_quality_calculator()
 
-    if __name__ == "__main__":
-        main()
+if __name__ == "__main__":
+    main()
