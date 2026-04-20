@@ -75,39 +75,43 @@ def run_data_converter():
                         x_line = lines[i+2]
                         y_line = lines[i+3]
                         
-                        # 도면치수 추출 (줄의 맨 앞 숫자)
-                        nom_x = clean_float(x_line[0]) if len(x_line) > 0 else 0.0
-                        nom_y = clean_float(y_line[0]) if len(y_line) > 0 else 0.0
-
-                        # 캐비티(샘플) 개수 자동 계산 로직
-                        # x_line에서 숫자가 포함된 요소 중 도면치수(첫번째)를 제외한 나머지 개수 확인
-                        numeric_values = [v for v in x_line if re.search(r'\d', str(v))]
-                        sample_count = len(numeric_values) - 1 # 첫 번째(Nominal) 제외
-
-                        for s in range(sample_count):
-                            # 뒤에서부터 샘플 개수만큼 데이터 추출
-                            idx = -(sample_count - s) 
+                        # [핵심] 줄에서 진짜 숫자(측정값)가 몇 개인지 찾기
+                        # 도면치수(Nominal)를 포함해 실제 데이터들만 골라냅니다.
+                        valid_numbers = [clean_float(v) for v in x_line if re.search(r'\d', str(v))]
+                        
+                        if len(valid_numbers) > 1:
+                            nom_x = valid_numbers[0] # 첫 번째 숫자는 도면치수
+                            # 나머지는 전부 샘플 데이터로 간주 (2개든 4개든 자동 대응)
+                            actual_samples_x = valid_numbers[1:] 
+                            sample_count = len(actual_samples_x)
                             
-                            act_x = clean_float(x_line[idx])
-                            act_y = clean_float(y_line[idx])
-                            # MMC 지름 라인(i+1)에서도 동일한 위치의 데이터 추출
-                            act_dia = clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
+                            # Y축도 동일하게 처리
+                            valid_numbers_y = [clean_float(v) for v in y_line if re.search(r'\d', str(v))]
+                            nom_y = valid_numbers_y[0]
+                            actual_samples_y = valid_numbers_y[1:]
                             
-                            # PIN 이름 찾기
-                            pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), f"POINT_{i//4 + 1}")
+                            # MMC 지름 라인에서도 숫자만 추출 (도면치수 칸 제외하고 뒤에서부터 추출)
+                            valid_numbers_dia = [clean_float(v) for v in lines[i+1] if re.search(r'\d', str(v))]
 
-                            processed_results.append({
-                                "측정포인트": f"{pin_name}_S{s+1}",
-                                "기본공차": 0.35,
-                                "도면치수_X": nom_x,
-                                "도면치수_Y": nom_y,
-                                "측정치_X": act_x,
-                                "측정치_Y": act_y,
-                                "실측지름_MMC용": act_dia
-                            })
+                            for s in range(sample_count):
+                                act_x = actual_samples_x[s]
+                                act_y = actual_samples_y[s]
+                                # 지름 데이터는 인덱스 맞춰서 가져오기 (없으면 기본값 0.35)
+                                act_dia = valid_numbers_dia[s+1] if len(valid_numbers_dia) > s+1 else 0.35
+                                
+                                pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), f"POINT_{i//4 + 1}")
+
+                                processed_results.append({
+                                    "측정포인트": f"{pin_name}_S{s+1}",
+                                    "기본공차": 0.35,
+                                    "도면치수_X": nom_x,
+                                    "도면치수_Y": nom_y,
+                                    "측정치_X": act_x,
+                                    "측정치_Y": act_y,
+                                    "실측지름_MMC용": act_dia
+                                })
                     except Exception as inner_e:
-                        continue # 한 블록 에러나도 다음으로 진행
-
+                        continue
                # 3. 결과 출력
                 if processed_results:
                     df_result = pd.DataFrame(processed_results)
