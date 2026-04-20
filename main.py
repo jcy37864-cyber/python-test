@@ -56,7 +56,7 @@ st.markdown("""
 plt.rcParams['axes.unicode_minus'] = False
 plt.rc('font', family='sans-serif') 
 
-st.title("📊 품질 측정 통합 시스템")
+st.title("📊 품질 측정실 통합 시스템")
 
 # =========================
 # 🛠️ 사이드바 메뉴 및 가이드
