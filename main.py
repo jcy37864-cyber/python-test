@@ -157,7 +157,7 @@ elif menu == "📈 그래프 분석":
 # =========================
 elif menu == "🧮 계산기":
     st.markdown('<div class="stBox">', unsafe_allow_html=True)
-    st.subheader("🧮 품질 보조 및 MMC 정밀 계산기")
+    st.subheader("🧮 품질 보조 계산기")
     
     # 탭 구성 (MMC 계산기 추가)
     tabs = st.tabs(["🎯 MMC 보너스 공차", "⚖️ 공차 정밀 판정", "🔧 토크 변환", "📏 단위 변환", "📊 데이터 산포"])
