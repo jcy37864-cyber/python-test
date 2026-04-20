@@ -218,7 +218,7 @@ elif menu == "📈 그래프 분석":
 
         # 엑셀 보고서 생성 로직 (이미지 삽입 포함)
         fig_mpl1, ax1 = plt.subplots(figsize=(10, 4))
-        ax1.plot(df.index, df["VALUE"], marker='o', color='#3b82f6'); ax1.axhline(y=df["MAX"].iloc[0], color='g', ls='--'); ax1.axhline(y=df["MIN"].iloc[0], color='o', ls='--')
+        ax1.plot(df.index, df["VALUE"], marker='o', color='#3b82f6'); ax1.axhline(y=df["MAX"].iloc[0], color='g', ls='--'); ax1.axhline(y=df["MIN"].iloc[0], color='orange', ls='--')
         if not ng_df.empty: ax1.scatter(ng_df.index, ng_df["VALUE"], color='red', s=40)
         if df.loc[worst_idx, "편차"] > 0: ax1.scatter(worst_idx, worst_val, facecolors='none', edgecolors='red', s=300, lw=2)
         img_line = BytesIO(); fig_mpl1.savefig(img_line, format='png'); plt.close(fig_mpl1)
