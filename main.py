@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from io import BytesIO
 
 # 1. 페이지 설정
 st.set_page_config(page_title="품질 측정 통합 프로그램", layout="wide")
 
-# 2. 그래프 폰트 설정 (영문 기본, 마이너스 깨짐 방지)
+# 2. 그래프 폰트 설정
 plt.rcParams['axes.unicode_minus'] = False
 plt.rc('font', family='sans-serif') 
 
@@ -34,16 +35,10 @@ if menu == "🔄 ZXY 변환":
 
     if "df_zxy" not in st.session_state:
         st.session_state.df_zxy = pd.DataFrame({
-            "X": [""] * 100,
-            "Y": [""] * 100,
-            "Z": [""] * 100,
+            "X": [""] * 100, "Y": [""] * 100, "Z": [""] * 100,
         })
 
-    edited_df = st.data_editor(
-        st.session_state.df_zxy,
-        use_container_width=True,
-        num_rows="dynamic"
-    )
+    edited_df = st.data_editor(st.session_state.df_zxy, use_container_width=True, num_rows="dynamic")
 
     if st.button("ZXY 결과 생성"):
         results = []
@@ -61,7 +56,7 @@ if menu == "🔄 ZXY 변환":
             st.warning("데이터를 입력해주세요.")
 
 # =========================
-# 📈 그래프 분석 (요약부 복구 및 상세화)
+# 📈 그래프 분석 (Plotly + Matplotlib 통합)
 # =========================
 elif menu == "📈 그래프 분석":
     st.subheader("📈 품질 그래프 분석")
@@ -76,49 +71,57 @@ elif menu == "📈 그래프 분석":
     st.download_button("📄 템플릿 다운로드", tmp_out.getvalue(), "template.xlsx")
 
     if uploaded_file:
+        # 데이터 로드 및 판정 로직
         df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
         df["판정"] = df.apply(lambda x: "OK" if x["MIN"] <= x["VALUE"] <= x["MAX"] else "NG", axis=1)
         df["편차"] = df.apply(lambda x: max(x["VALUE"] - x["MAX"], x["MIN"] - x["VALUE"], 0), axis=1)
 
-        # 화면 표시용 NG 강조 테이블
+        # 1. 화면용 Plotly 대화형 그래프 (마우스 오버 시 정보 표시)
+        st.markdown("#### 🔍 대화형 추이 분석 (마우스를 점 위에 올려보세요)")
+        fig_plotly = go.Figure()
+        fig_plotly.add_trace(go.Scatter(
+            x=df.index, y=df["VALUE"], mode='lines+markers', name='측정값',
+            text=[f"샘플: {i}<br>판정: {p}" for i, p in zip(df.index, df["판정"])],
+            hovertemplate="<b>%{text}</b><br>수치: %{y:.4f}<extra></extra>",
+            line=dict(color='#1f77b4', width=2)
+        ))
+        fig_plotly.add_hline(y=df["MAX"].iloc[0], line_dash="dash", line_color="green", annotation_text="MAX")
+        fig_plotly.add_hline(y=df["MIN"].iloc[0], line_dash="dash", line_color="orange", annotation_text="MIN")
+        
+        ng_df = df[df["판정"] == "NG"]
+        if not ng_df.empty:
+            fig_plotly.add_trace(go.Scatter(
+                x=ng_df.index, y=ng_df["VALUE"], mode='markers', name='불량(NG)',
+                marker=dict(color='red', size=10),
+                hovertemplate="<b>🚨 NG 샘플: %{x}</b><br>수치: %{y:.4f}<extra></extra>"
+            ))
+        
+        fig_plotly.update_layout(hovermode="closest", template="plotly_white", margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig_plotly, use_container_width=True)
+
+        # 2. 데이터 테이블 표시
         def highlight_ng(row):
             return ['background-color: #ffcccc' if row["판정"] == "NG" else '' for _ in row]
         st.dataframe(df.style.apply(highlight_ng, axis=1), use_container_width=True)
 
-        # 📊 그래프 생성
-        fig, ax = plt.subplots(figsize=(12, 5))
-        ax.plot(df["VALUE"], marker='o', markersize=4, label="VALUE", zorder=3, alpha=0.8)
-        ax.axhline(y=df["MAX"].iloc[0], color='green', linestyle='--', alpha=0.6, label="MAX")
-        ax.axhline(y=df["MIN"].iloc[0], color='orange', linestyle='--', alpha=0.6, label="MIN")
-
-        # NG 및 Worst 강조
+        # 3. 엑셀 저장용 Matplotlib 그래프 생성 (보이지 않게 처리)
+        fig_mpl, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(df["VALUE"], marker='o', markersize=4, color='#1f77b4')
+        ax.axhline(y=df["MAX"].iloc[0], color='green', linestyle='--')
+        ax.axhline(y=df["MIN"].iloc[0], color='orange', linestyle='--')
         worst_idx = df["편차"].idxmax()
-        worst_row = df.loc[worst_idx]
-        ng_points = df[df["판정"] == "NG"]
-        ax.scatter(ng_points.index, ng_points["VALUE"], color='red', s=40, zorder=4)
-
-        if worst_row["편차"] > 0:
-            ax.scatter(worst_idx, worst_row["VALUE"], facecolors='none', edgecolors='red', s=450, linewidths=2.5, zorder=5)
-
-        # 수치 레이블 표시
-        ax.text(len(df)-1, df["MAX"].iloc[-1], f"MAX: {df['MAX'].iloc[-1]:.3f}", color='green', ha='right', fontweight='bold')
-        ax.text(len(df)-1, df["MIN"].iloc[-1], f"MIN: {df['MIN'].iloc[-1]:.3f}", color='orange', ha='right', fontweight='bold')
-        ax.set_title("Quality Trend Analysis (Worst Point Highlighted)")
-        ax.legend(loc='lower left')
-        ax.grid(True, linestyle=':', alpha=0.4)
+        if df.loc[worst_idx, "편차"] > 0:
+            ax.scatter(worst_idx, df.loc[worst_idx, "VALUE"], facecolors='none', edgecolors='red', s=400, linewidths=2)
         
-        st.pyplot(fig)
-
-        # 그래프 이미지 버퍼 저장
         img_buffer = BytesIO()
-        fig.savefig(img_buffer, format='png', bbox_inches='tight')
+        fig_mpl.savefig(img_buffer, format='png', bbox_inches='tight')
+        plt.close(fig_mpl)
 
-        # 📄 결과 엑셀 저장 (이미지 + 서식)
+        # 4. 결과 엑셀 다운로드
         excel_out = BytesIO()
         with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Result')
-            workbook  = writer.book
-            worksheet = writer.sheets['Result']
+            workbook, worksheet = writer.book, writer.sheets['Result']
             red_format = workbook.add_format({'bg_color': '#FFCCCC', 'font_color': '#9C0006'})
             for row_num in range(1, len(df) + 1):
                 if df.iloc[row_num-1]["판정"] == "NG":
@@ -127,46 +130,28 @@ elif menu == "📈 그래프 분석":
 
         st.download_button("📸 결과 엑셀 다운로드 (이미지 포함)", excel_out.getvalue(), "quality_report.xlsx")
 
-        # 🔥 [복구 및 개선] 검사 결과 요약 섹션
+        # 5. 요약 섹션
         st.markdown("---")
         col1, col2 = st.columns(2)
-
         with col1:
             st.markdown("### 📋 검사 결과 요약")
-            total = len(df)
-            ng_count = len(df[df["판정"] == "NG"])
-            ok_count = total - ng_count
+            total, ng_count = len(df), len(df[df["판정"] == "NG"])
+            st.write(f"• 전체: {total} / 양호: {total-ng_count} / 불량: {ng_count}")
+            if ng_count == 0: st.success("✅ 모든 데이터 규격 만족")
+            else: st.error(f"🚨 규격 이탈 발생 ({ng_count}건)")
             
-            st.write(f"• **전체 샘플:** {total}개")
-            st.write(f"• **양호(OK):** {ok_count}개")
-            st.write(f"• **불량(NG):** {ng_count}개")
-            
-            if ng_count == 0:
-                st.success("✅ **최종 판정: 모든 데이터 규격 만족**")
-            else:
-                st.error(f"🚨 **최종 판정: 규격 이탈 발생 (총 {ng_count}건)**")
-
-            # 평균 기반 경향 분석 (기존 내용 복구)
             avg_val = df["VALUE"].mean()
-            mean_max = df["MAX"].mean()
-            mean_min = df["MIN"].mean()
-            
-            if avg_val > mean_max:
-                st.error(f"📉 **경향 분석:** 전체 평균({avg_val:.4f})이 상한값을 초과하는 추세입니다.")
-            elif avg_val < mean_min:
-                st.error(f"📈 **경향 분석:** 전체 평균({avg_val:.4f})이 하한값에 미달하는 추세입니다.")
-            else:
-                st.info(f"✔ **경향 분석:** 평균({avg_val:.4f})이 규격 내에서 안정적으로 분포하고 있습니다.")
+            if avg_val > df["MAX"].mean(): st.error(f"📉 경향: 평균({avg_val:.4f}) 상한 초과 추세")
+            elif avg_val < df["MIN"].mean(): st.error(f"📈 경향: 평균({avg_val:.4f}) 하한 미달 추세")
+            else: st.info(f"✔ 경향: 평균({avg_val:.4f}) 규격 내 안정적")
 
         with col2:
-            st.markdown("### 📍 Worst Point 상세 정보")
+            st.markdown("### 📍 Worst Point 정보")
+            worst_row = df.loc[worst_idx]
             if worst_row["편차"] > 0:
                 st.error(f"**최대 편차 측정값: {worst_row['VALUE']:.4f}**")
-                st.write(f"• 데이터 순번(Index): {worst_idx}")
-                st.write(f"• 규격 대비 편차량: {worst_row['편차']:.4f}")
-                st.write(f"• 해당 데이터 판정: {worst_row['판정']}")
-            else:
-                st.info("✅ Worst 포인트가 없습니다. (전체 양호)")
+                st.write(f"• 순번: {worst_idx} / 편차량: {worst_row['편차']:.4f}")
+            else: st.info("✅ Worst 포인트 없음")
 
 # =========================
 # 🧮 계산기
@@ -174,43 +159,24 @@ elif menu == "📈 그래프 분석":
 elif menu == "🧮 계산기":
     st.subheader("🧮 품질 보조 계산기")
     calc = st.selectbox("기능 선택", ["토크 변환", "합계/평균", "공차 판정"])
-
     if calc == "토크 변환":
         val = st.number_input("수치 입력", 0.0)
         mode = st.selectbox("변환 선택", ["N·m → kgf·m", "kgf·m → N·m"])
         if mode == "N·m → kgf·m": st.success(f"결과: {val * 0.101972:.4f} kgf·m")
         else: st.success(f"결과: {val * 9.80665:.4f} N·m")
-
     elif calc == "합계/평균":
         nums = st.text_input("값 입력 (쉼표 구분)", "10, 20, 30")
         try:
             vals = [float(x.strip()) for x in nums.split(",") if x.strip()]
             if vals: st.info(f"합계: {sum(vals):.2f} / 평균: {sum(vals)/len(vals):.2f}")
-        except: st.error("입력 형식을 확인하세요.")
-
+        except: st.error("형식을 확인하세요.")
     elif calc == "공차 판정":
-        st.info("기준값 대비 상한(+) 공차와 하한(-) 공차를 각각 입력하여 판정합니다.")
-        col1, col2, col3, col4 = st.columns(4)
-        target = col1.number_input("기준값 (Target)", value=0.0, format="%.4f")
-        upper_tol = col2.number_input("상한공차 (+)", value=0.0, format="%.4f")
-        lower_tol = col3.number_input("하한공차 (-)", value=0.0, format="%.4f")
-        measure = col4.number_input("측정값 (Value)", value=0.0, format="%.4f")
-        
-        min_limit = target - abs(lower_tol)
-        max_limit = target + abs(upper_tol)
-        
-        st.markdown("---")
-        res_col1, res_col2 = st.columns(2)
-        with res_col1:
-            st.write(f"**규격 범위:** {min_limit:.4f} ~ {max_limit:.4f}")
-            if min_limit <= measure <= max_limit:
-                st.success(f"### 판정 결과: OK ✅")
-            else:
-                st.error(f"### 판정 결과: NG 🚨")
-        with res_col2:
-            if measure > max_limit:
-                st.warning(f"상한 초과: +{measure - max_limit:.4f}")
-            elif measure < min_limit:
-                st.warning(f"하한 미달: -{min_limit - measure:.4f}")
-            else:
-                st.info("규격 이내 안정적")
+        st.info("상하한 공차 분리 판정")
+        c1, c2, c3, c4 = st.columns(4)
+        target = c1.number_input("기준값", 0.0, format="%.4f")
+        u_tol = c2.number_input("상한(+)", 0.0, format="%.4f")
+        l_tol = c3.number_input("하한(-)", 0.0, format="%.4f")
+        meas = c4.number_input("측정값", 0.0, format="%.4f")
+        mi, ma = target - abs(l_tol), target + abs(u_tol)
+        if mi <= meas <= ma: st.success(f"OK ({mi:.4f} ~ {ma:.4f})")
+        else: st.error(f"NG (이탈: {meas-ma if meas>ma else meas-mi:.4f})")
