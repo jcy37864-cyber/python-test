@@ -101,14 +101,33 @@ elif menu == "📈 그래프 분석":
         st.plotly_chart(fig_p, use_container_width=True)
 
         # 보조 막대 그래프
-        st.subheader("📊 샘플별 수치 비교 (Bar)")
+      # 보조 막대 그래프 (Y축 범위 최적화 버전)
+        st.subheader("📊 샘플별 수치 비교 (Bar - 정밀 보기)")
         colors = ['#FF4B4B' if p == "NG" else '#00B4D8' for p in df["판정"]]
         fig_b = go.Figure()
-        fig_b.add_trace(go.Bar(x=df.index, y=df["VALUE"], marker_color=colors, name='측정치'))
-        fig_b.add_hline(y=df["MAX"].iloc[0], line_dash="dash", line_color="green")
-        fig_b.add_hline(y=df["MIN"].iloc[0], line_dash="dash", line_color="orange")
+        fig_b.add_trace(go.Bar(
+            x=df.index, 
+            y=df["VALUE"], 
+            marker_color=colors, 
+            name='측정치',
+            text=df["VALUE"],           # 막대 위에 수치 표시
+            textposition='outside'      # 수치 위치
+        ))
+        
+        # 규격선 표시
+        fig_b.add_hline(y=df["MAX"].iloc[0], line_dash="dash", line_color="green", annotation_text="MAX")
+        fig_b.add_hline(y=df["MIN"].iloc[0], line_dash="dash", line_color="orange", annotation_text="MIN")
+
+        # [핵심] Y축 범위 자동 설정: 측정값의 최소값보다 조금 낮게, 최대값보다 조금 높게
+        y_min = min(df["VALUE"].min(), df["MIN"].min()) * 0.999  # 하한값이나 측정값 중 작은 쪽 기준
+        y_max = max(df["VALUE"].max(), df["MAX"].max()) * 1.001  # 상한값이나 측정값 중 큰 쪽 기준
+        
+        fig_b.update_layout(
+            yaxis_range=[y_min, y_max], 
+            yaxis=dict(tickformat=".3f"), # 소수점 3자리까지 표시
+            showlegend=False
+        )
         st.plotly_chart(fig_b, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
         # [다운로드 및 리포트]
         st.markdown('<div class="stBox">', unsafe_allow_html=True)
