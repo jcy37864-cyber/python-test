@@ -276,4 +276,4 @@ def main():
         run_quality_calculator()
 
     if __name__ == "__main__":
-    main()
+        main()
