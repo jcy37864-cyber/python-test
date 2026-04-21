@@ -73,50 +73,80 @@ def run_data_converter():
         
         if st.button("🚀 데이터 변환 실행"):
             if raw_data:
-                # 1. 텍스트 정리 (탭이나 여러 개의 공백을 구분자로 사용)
-                lines = []
-                for row in raw_data.strip().split('\n'):
-                    cols = re.split(r'\t|\s{2,}', row.strip())
-                    # 빈 칸 제거하고 실제 데이터만 남기기
-                    cols = [c.strip() for c in cols if c.strip()]
-                    if cols: lines.append(cols)
+                # 1. 텍스트를 줄 단위로 나누고, 빈 칸을 제거한 실제 값만 리스트로 만듦
+                all_lines = []
+                for line in raw_data.strip().split('\n'):
+                    # 탭 또는 공백 2개 이상으로 분리 후 빈 값 제거
+                    cols = [c.strip() for c in re.split(r'\t|\s{2,}', line) if c.strip()]
+                    all_lines.append(cols)
                 
-                # 2. 항목명(A, B, C...) 기반 데이터 매칭
-                for i in range(len(lines)):
-                    line = lines[i]
+                # 2. 데이터 탐색
+                for i in range(len(all_lines)):
+                    line = all_lines[i]
+                    if not line: continue
                     
-                    # [핵심] 줄의 첫 번째 칸이 딱 '한 글자 알파벳'인 경우 (A, B, C...)
-                    # 또는 항목명이 포함된 위치를 유연하게 찾음
+                    # [핵심] 줄 안에 'A', 'B', 'C' 같은 한 글자 항목명이 있는지 확인
                     item_name = ""
-                    if len(line[0]) == 1 and line[0].isalpha():
-                        item_name = line[0]
+                    item_index = -1
+                    for idx, val in enumerate(line):
+                        if len(val) == 1 and val.isalpha(): # 한 글자 알파벳 찾기
+                            item_name = val
+                            item_index = idx
+                            break
                     
-                    if item_name:
+                    # 항목명을 찾았고, 아래에 X, Y줄이 더 있다면
+                    if item_name and i + 2 < len(all_lines):
                         try:
-                            # 현재 줄: 위치도 / i+1: X / i+2: Y
-                            # 사용자 파일 구조상 데이터는 이름 바로 뒤에 나열됨
-                            pos_vals = lines[i][1:]
-                            x_vals = lines[i+1]
-                            y_vals = lines[i+2]
+                            # 현재 줄(위치도), 다음줄(X), 그 다음줄(Y)
+                            row_pos = all_lines[i]
+                            row_x = all_lines[i+1]
+                            row_y = all_lines[i+2]
                             
-                            # X와 Y줄에서 첫 번째 숫자는 보통 '도면치수(Nominal)'
-                            nom_x = clean_float(x_vals[0])
-                            nom_y = clean_float(y_vals[0])
-
+                            # 데이터 추출 (항목명 바로 다음 칸부터 샘플 데이터라고 가정)
+                            # 만약 위치가 밀린다면 row_x[item_index + 1] 방식으로 접근
                             for s in range(sample_count):
-                                # 시료 데이터는 도면치수 다음부터 순서대로 가져옴
-                                # 보통 x_vals[1]이 1-1, x_vals[2]가 1-2...
                                 processed_results.append({
                                     "측정포인트": f"{item_name}_S{s+1}",
                                     "기본공차": 0.35,
-                                    "도면치수_X": nom_x,
-                                    "도면치수_Y": nom_y,
-                                    "측정치_X": clean_float(x_vals[s+1]),
-                                    "측정치_Y": clean_float(y_vals[s+1]),
-                                    "실측지름_MMC용": clean_float(pos_vals[s])
+                                    "도면치수_X": clean_float(row_x[item_index]), 
+                                    "도면치수_Y": clean_float(row_y[item_index]),
+                                    "측정치_X": clean_float(row_x[item_index + s + 1]),
+                                    "측정치_Y": clean_float(row_y[item_index + s + 1]),
+                                    "실측지름_MMC용": clean_float(row_pos[item_index + s + 1])
                                 })
-                        except:
-                            continue
+                        except: continue
+
+    else:
+        up_file = st.file_uploader("CSV 파일을 업로드하세요", type=['csv'])
+        if up_file:
+            df = pd.read_csv(up_file, header=None).fillna("")
+            if st.button("🚀 파일 변환 실행"):
+                for i in range(len(df)):
+                    for col in range(df.shape[1]):
+                        val = str(df.iloc[i, col]).strip()
+                        # 한 글자 알파벳 항목명 찾기
+                        if len(val) == 1 and val.isalpha():
+                            try:
+                                item_name = val
+                                for s in range(sample_count):
+                                    processed_results.append({
+                                        "측정포인트": f"{item_name}_S{s+1}",
+                                        "기본공차": 0.35, "도면치수_X": 0.0, "도면치수_Y": 0.0,
+                                        "측정치_X": clean_float(df.iloc[i+1, col+s+1]),
+                                        "측정치_Y": clean_float(df.iloc[i+2, col+s+1]),
+                                        "실측지름_MMC용": clean_float(df.iloc[i, col+s+1])
+                                    })
+                            except: continue
+
+    if processed_results:
+        df_res = pd.DataFrame(processed_results)
+        df_res.index = df_res.index + 1
+        st.success(f"✅ {len(processed_results)}개 변환 성공!")
+        st.dataframe(df_res, use_container_width=True)
+        st.session_state.data = df_res
+        st.balloons()
+    elif (input_method == "텍스트 붙여넣기" and 'raw_data' in locals() and raw_data):
+        st.warning("데이터를 찾지 못했습니다. 알파벳 항목명(A, B, C...)이 포함되었
 
     # --- 방식 2: 엑셀/CSV 업로드 (파일 내부 구조에 맞춰 정밀 수정) ---
     else:
