@@ -7,13 +7,13 @@ import re
 def run_position_analysis():
     st.title("🎯 위치도 정밀 분석 시스템")
 
-    # 1. 상태 유지를 위한 세션 변수 초기화
+    # 상태 유지 세션 변수
     if 'active_tab1' not in st.session_state: st.session_state.active_tab1 = False
     if 'active_tab2' not in st.session_state: st.session_state.active_tab2 = False
 
     tab1, tab2 = st.tabs(["📍 유형 A (좌표 방식)", "📊 유형 B (결과값 방식)"])
 
-    # --- [탭 1: 유형 A - 좌표 데이터용] ---
+    # --- [탭 1: 유형 A] ---
     with tab1:
         st.subheader("좌표(X, Y) 기반 분석")
         c1, c2 = st.columns(2)
@@ -44,7 +44,7 @@ def run_position_analysis():
                 show_graph_and_table(res_a, tol_a, zoom_a)
             except Exception as e: st.error(f"유형 A 오류: {e}")
 
-    # --- [탭 2: 유형 B - MMC공차 기입용] ---
+    # --- [탭 2: 유형 B] ---
     with tab2:
         st.subheader("MMC공차 행 포함 분석")
         c1, c2 = st.columns(2)
@@ -60,16 +60,26 @@ def run_position_analysis():
         
         if st.session_state.active_tab2 and raw_b:
             try:
-                v_rows = [ [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', l)] for l in raw_b.split('\n') if any(n != int(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', l)) ]
+                # 수정된 로직: 소수점이 포함된 숫자(float)가 들어있는 줄만 추출
+                v_rows = []
+                for l in raw_b.split('\n'):
+                    nums = re.findall(r'[-+]?\d*\.\d+|\d+', l)
+                    if nums:
+                        # 리스트 안에 소수점('.')이 포함된 문자열이 하나라도 있으면 데이터 줄로 인정
+                        if any('.' in n for n in nums):
+                            v_rows.append([float(n) for n in nums])
+                
                 res_b = []
                 for i in range(0, len(v_rows) // 3 * 3, 3):
-                    pos, mmc = v_rows[i][-sc_b:], v_rows[i+1][-sc_b:]
+                    # 측정값(위치도) 행과 MMC공차 행에서 샘플 개수만큼 가져오기
+                    pos_vals = v_rows[i][-sc_b:]
+                    mmc_vals = v_rows[i+1][-sc_b:]
                     for s in range(sc_b):
                         res_b.append({
                             "측정포인트": f"P{(i//3)+1}_S{s+1}",
-                            "위치도": pos[s],
-                            "최종공차": round(tol_b + mmc[s], 4),
-                            "X_dev": (pos[s]/4) * (1 if s < sc_b/2 else -1), "Y_dev": 0
+                            "위치도": pos_vals[s],
+                            "최종공차": round(tol_b + mmc_vals[s], 4),
+                            "X_dev": (pos_vals[s]/4) * (1 if s < sc_b/2 else -1), "Y_dev": 0
                         })
                 show_graph_and_table(res_b, tol_b, zoom_b)
             except Exception as e: st.error(f"유형 B 오류: {e}")
@@ -94,7 +104,7 @@ def show_graph_and_table(results, base_tol, zoom):
                 marker=dict(size=12, color="#2ecc71" if res=="✅ OK" else "#e74c3c")
             ))
 
-    fig.update_layout(width=600, height=600, xaxis=dict(range=[-zoom, zoom]), yaxis=dict(range=[-zoom, zoom]), showlegend=True)
+    fig.update_layout(width=600, height=600, xaxis=dict(range=[-zoom, zoom]), yaxis=dict(range=[-zoom, zoom]))
     st.plotly_chart(fig, use_container_width=True)
     st.dataframe(df[['측정포인트', '위치도', '최종공차', '판정']])
 
