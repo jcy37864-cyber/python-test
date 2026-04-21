@@ -6,7 +6,7 @@ import re
 
 # 1. 앱 설정
 st.set_page_config(page_title="덕인 위치도 분석기", layout="wide")
-st.title("🎯 위치도 정밀 분석 (범위 밖 시료 별도 표시)")
+st.title("🎯 위치도 정밀 분석 (이중 허용 가이드)")
 
 # 2. 데이터 파싱 함수
 def parse_smart_data(raw_text, sc):
@@ -38,6 +38,9 @@ with st.sidebar:
     sc = st.number_input("샘플 수", min_value=1, value=4)
     tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f")
     mmc_ref = st.number_input("MMC 기준치", value=0.350, format="%.3f")
+    st.divider()
+    st.write("🔵 **파란 실선**: 기본 공차")
+    st.write("🔴 **빨간 점선**: 보너스 포함 최대 합격선")
 
 # 4. 데이터 입력
 raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=150)
@@ -49,56 +52,63 @@ if raw_input:
         df['편차_X'] = (df['측정_X'] - df['도면_X']).round(4)
         df['편차_Y'] = (df['측정_Y'] - df['도면_Y']).round(4)
         df['위치도'] = (np.sqrt(df['편차_X']**2 + df['편차_Y']**2) * 2).round(4)
-        df['최종공차'] = (tol + (df['지름_MMC'] - mmc_ref).clip(lower=0)).round(4)
+        df['보너스'] = (df['지름_MMC'] - mmc_ref).clip(lower=0).round(4)
+        df['최종공차'] = (tol + df['보너스']).round(4)
         df['판정'] = np.where(df['위치도'] <= df['최종공차'], "✅ OK", "❌ NG")
 
-        # --- 📊 그래프 및 범위 밖 처리 ---
-        view_limit = 0.7  # 과녁 시인성을 위해 ±0.7mm로 화면 고정
+        # --- 📊 이중 허용 라인 그래프 ---
+        # 시인성을 위해 ±0.6mm~0.8mm 정도로 범위 고정
+        view_limit = 0.7 
         
-        # 화면 밖으로 나간 NG 시료 필터링
+        # 범위 밖 시료 분류
         out_of_bounds = df[(df['편차_X'].abs() > view_limit) | (df['편차_Y'].abs() > view_limit)]
         in_bounds = df[(df['편차_X'].abs() <= view_limit) & (df['편차_Y'].abs() <= view_limit)]
 
         fig = go.Figure()
         
-        # 가이드 원 (기본공차/최대공차)
+        # [원 1] 기본 공차 (파란 실선)
         r_base = tol / 2
-        r_max = df['최종공차'].max() / 2
         fig.add_shape(type="circle", x0=-r_base, y0=-r_base, x1=r_base, y1=r_base,
                       line=dict(color="RoyalBlue", width=2), fillcolor="rgba(65, 105, 225, 0.1)")
+        
+        # [원 2] MMC 보너스 포함 최대 허용선 (빨간 점선)
+        # 모든 시료 중 가장 큰 최종공차를 기준으로 가이드라인 표시
+        r_max = df['최종공차'].max() / 2
         fig.add_shape(type="circle", x0=-r_max, y0=-r_max, x1=r_max, y1=r_max,
                       line=dict(color="Red", width=1.5, dash="dot"))
 
-        # 화면 안의 데이터만 그래프에 표시
+        # 데이터 점 찍기
         for res in ["✅ OK", "❌ NG"]:
             sub = in_bounds[in_bounds['판정'] == res]
             if not sub.empty:
                 fig.add_trace(go.Scatter(
                     x=sub['편차_X'], y=sub['편차_Y'], mode='markers+text', name=res,
                     text=sub['측정포인트'], textposition="top center",
-                    marker=dict(size=12, color="#2ecc71" if res=="✅ OK" else "#e74c3c", line=dict(width=1, color="white"))
+                    marker=dict(size=12, color="#2ecc71" if res=="✅ OK" else "#e74c3c", line=dict(width=1, color="white")),
+                    hovertemplate="X: %{x}<br>Y: %{y}<br>위치도: %{customdata:.3f}<extra></extra>",
+                    customdata=sub['위치도']
                 ))
 
         fig.update_layout(
-            width=600, height=600,
-            xaxis=dict(range=[-view_limit, view_limit], title="X 편차"),
-            yaxis=dict(range=[-view_limit, view_limit], title="Y 편차"),
-            title=f"🎯 과녁 중심부 (Ø{tol} 기준)"
+            width=700, height=700,
+            xaxis=dict(range=[-view_limit, view_limit], title="X 편차", zeroline=True),
+            yaxis=dict(range=[-view_limit, view_limit], title="Y 편차", zeroline=True),
+            title=f"🎯 이중 허용 범위 분석 (최대 합격선: Ø{df['최종공차'].max():.3f})",
+            plot_bgcolor='white'
         )
 
-        # UI 출력
+        # 결과 출력
         col1, col2 = st.columns([2, 1])
         with col1:
             st.plotly_chart(fig, use_container_width=True)
         with col2:
-            st.metric("합격(OK)", f"{len(df[df['판정']=='✅ OK'])} 개")
-            st.error(f"불합격(NG): {len(df[df['판정']=='❌ NG'])} 개")
+            st.success(f"합격(OK): {len(df[df['판정']=='✅ OK'])}개")
+            st.error(f"불합격(NG): {len(df[df['판정']=='❌ NG'])}개")
             
-            # --- 💡 범위 밖 시료 따로 표시 ---
             if not out_of_bounds.empty:
                 st.warning("⚠️ 그래프 범위 밖 NG 시료")
                 for _, row in out_of_bounds.iterrows():
-                    st.write(f"**{row['측정포인트']}**: X({row['편차_X']}), Y({row['편차_Y']})")
+                    st.write(f"**{row['측정포인트']}**: 위치도 {row['위치도']:.3f} (오차 매우 큼)")
 
-        st.subheader("📋 전체 상세 데이터")
-        st.dataframe(df[['측정포인트', '편차_X', '편차_Y', '위치도', '최종공차', '판정']], use_container_width=True)
+        st.subheader("📋 전체 상세 데이터 (MMC 보너스 확인)")
+        st.dataframe(df[['측정포인트', '편차_X', '편차_Y', '위치도', '보너스', '최종공차', '판정']], use_container_width=True)
