@@ -48,54 +48,57 @@ def set_style():
     st.markdown("""
         <style>
         /* ───────── 사이드바 배경 ───────── */
-        [data-testid="stSidebar"] {
+        section[data-testid="stSidebar"] {
             background-color: #0f172a !important;
         }
 
-        /* ───────── 사이드바 전체 텍스트 강제 흰색 ───────── */
-        [data-testid="stSidebar"],
-        [data-testid="stSidebar"] * ,
-        [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] span,
-        [data-testid="stSidebar"] p,
-        [data-testid="stSidebar"] div {
-            color: #f8fafc !important;
+        /* ───────── 사이드바 텍스트 전체 강제 ───────── */
+        section[data-testid="stSidebar"] * {
+            color: #ffffff !important;
         }
 
-        /* 🔥 라디오 버튼 텍스트 */
-        [data-testid="stSidebar"] .stRadio label {
-            color: #f8fafc !important;
-            font-weight: 500;
+        /* 🔥 BaseWeb (라디오, 셀렉트 핵심) */
+        section[data-testid="stSidebar"] [data-baseweb="radio"] * {
+            color: #ffffff !important;
         }
 
-        /* 🔥 숫자 입력 라벨 */
-        [data-testid="stSidebar"] .stNumberInput label {
-            color: #f8fafc !important;
+        section[data-testid="stSidebar"] [data-baseweb="select"] * {
+            color: #ffffff !important;
         }
 
-        /* 🔥 caption (설명글) */
-        [data-testid="stSidebar"] .stCaption {
-            color: #cbd5f5 !important;
+        /* 🔥 label 강제 */
+        section[data-testid="stSidebar"] label {
+            color: #ffffff !important;
+            font-weight: 500 !important;
         }
 
-        /* ───────── 본문 (흰 배경 영역) ───────── */
-        div:not([data-testid="stSidebar"]) label {
+        /* 🔥 markdown / caption */
+        section[data-testid="stSidebar"] .stMarkdown,
+        section[data-testid="stSidebar"] .stCaption {
+            color: #e2e8f0 !important;
+        }
+
+        /* 🔥 숫자 입력 */
+        section[data-testid="stSidebar"] .stNumberInput input {
+            color: #111 !important;
+            background-color: #ffffff !important;
+        }
+
+        /* ───────── 본문 영역 ───────── */
+        .main label {
             color: #111 !important;
             font-weight: 600;
         }
 
-        div:not([data-testid="stSidebar"]) p,
-        div:not([data-testid="stSidebar"]) span {
+        .main p, .main span {
             color: #222 !important;
         }
 
-        div:not([data-testid="stSidebar"]) .stCaption {
+        .main .stCaption {
             color: #444 !important;
         }
 
-        /* 입력창 */
-        div:not([data-testid="stSidebar"]) input,
-        div:not([data-testid="stSidebar"]) textarea {
+        .main input, .main textarea {
             color: #111 !important;
             background-color: #ffffff !important;
         }
@@ -110,7 +113,17 @@ def set_style():
             height: 3em;
         }
 
-        /* 기타 UI */
+        /* 카드 */
+        .report-card {
+            background-color: #f1f5f9;
+            padding: 20px;
+            border-left: 8px solid #3b82f6;
+            border-radius: 8px;
+            line-height: 2.0;
+            font-size: 1.05em;
+            color: #111;
+        }
+
         .ng-box {
             height: 200px;
             overflow-y: auto;
@@ -128,16 +141,6 @@ def set_style():
             font-weight: bold;
             text-align: center;
             font-size: 1.1em;
-        }
-
-        .report-card {
-            background-color: #f1f5f9;
-            padding: 20px;
-            border-left: 8px solid #3b82f6;
-            border-radius: 8px;
-            line-height: 2.0;
-            font-size: 1.05em;
-            color: #111;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -763,6 +766,7 @@ def main():
     elif menu == "📈 멀티 캐비티 분석":
         run_cavity_analysis()
     elif menu == "🧮 품질 통합 계산기":
+
         run_quality_calculator()
 
 if __name__ == "__main__":
