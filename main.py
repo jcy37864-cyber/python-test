@@ -6,7 +6,7 @@ import matplotlib.font_manager as fm
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="Quality Hub Pro v2.11", layout="wide")
+st.set_page_config(page_title="Quality Hub Pro v2.13", layout="wide")
 
 # ─────────────────────────────────────────────────
 # 한글 폰트 설정 (그래프 한글 깨짐 방지)
@@ -171,12 +171,22 @@ def parse_type_a(raw_input, sc):
     return results
 
 # ═══════════════════════════════════════════════════════
-# B유형 파서
+# B유형 파서 — 3줄/4줄 자동 감지 (같은 입력에 혼재 가능)
 # ─────────────────────────────────────────────────────
-# 3줄 세트 구조:
-#   줄1: Ø0.35ⓜ  0.00  0.35  Ref번호   위치도_S1  위치도_S2  ...
-#   줄2: Max0.41  0           MMC공차   MMC_S1     MMC_S2    ...
-#   줄3: Nominal  -100  100   Y         Y_S1       Y_S2      ...
+# [4줄 세트] X+Y 둘 다 있는 경우:
+#   줄1: Ø공차  0.00  0.30  위치도명   위치도_S1 ...
+#   줄2: Max...          MMC허용공차  MMC_S1 ...
+#   줄3: X  X_S1  X_S2 ...         ← 첫 토큰 'X'
+#   줄4: Y  Y_S1  Y_S2 ...         ← 첫 토큰 'Y'
+#
+# [3줄 세트] Y만 있는 경우:
+#   줄1: Ø공차  0.00  0.35  Ref번호  위치도_S1 ...
+#   줄2: Max...          MMC허용공차  MMC_S1 ...
+#   줄3: NomY  -100  100  Y  Y_S1 ... ← 숫자로 시작, 'Y' 레이블 포함
+#        또는: Y  Y_S1  Y_S2 ...      ← 첫 토큰 'Y'만
+#
+# 판별 기준: i+3번째 줄 첫 토큰이 'Y' → 4줄 세트
+#            i+2번째 줄 첫 토큰이 'Y' 또는 숫자+Y포함 → 3줄 세트
 # ═══════════════════════════════════════════════════════
 def parse_type_b(raw_input, sc, tol, m_ref):
     results = []
@@ -194,62 +204,140 @@ def parse_type_b(raw_input, sc, tol, m_ref):
         if parts:
             lines.append(parts)
 
+    def tail(lst, n):
+        lst = [v for v in lst if v is not None]
+        return lst[-n:] if len(lst) >= n else lst
+
+    def first_tok(row):
+        return str(row[0]).strip().upper() if row else ''
+
+    def is_y_row(row):
+        """첫 토큰이 'Y'이거나, 숫자로 시작하면서 행 안에 'Y' 토큰이 있는 줄"""
+        if not row:
+            return False
+        ft = first_tok(row)
+        if ft == 'Y':
+            return True
+        # 숫자 Nominal + Y레이블 혼합 행: "4.75  -100  100  Y  ..."
+        if is_num(row[0]) and any(str(t).strip().upper() == 'Y' for t in row):
+            return True
+        return False
+
+    def is_x_row(row):
+        """첫 토큰이 'X'인 줄"""
+        return first_tok(row) == 'X'
+
+    def extract_labeled_row(row, label):
+        """
+        X 또는 Y 레이블 행에서 Nominal과 실측값 분리.
+        반환: (nominal, [실측값...])
+        - 'X  val1 val2 ...' → nominal=0.0, vals=[val1,val2,...]
+        - 'NomY  -100  100  Y  val1 val2' → nominal=NomY, vals=[val1,val2,...]
+        - 숫자로 시작하고 레이블 없으면 첫 숫자=nominal
+        """
+        ft = first_tok(row)
+        if ft == label:
+            # 레이블만 있고 바로 실측: nominal=0
+            nums = [clean_float(v) for v in row[1:] if is_num(v)]
+            return 0.0, nums
+        else:
+            # 숫자 Nominal이 앞에 있고 중간에 레이블
+            all_nums = [clean_float(v) for v in row if is_num(v)]
+            # 레이블 이후 토큰만 실측으로 간주
+            try:
+                label_idx = next(j for j, t in enumerate(row)
+                                 if str(t).strip().upper() == label)
+                nom = clean_float(row[0]) if is_num(row[0]) else 0.0
+                vals = [clean_float(v) for v in row[label_idx+1:] if is_num(v)]
+                return nom, vals
+            except StopIteration:
+                # 레이블 없으면 첫 숫자=nominal, 나머지=실측
+                nom = all_nums[0] if all_nums else 0.0
+                return nom, all_nums[1:]
+
+    def extract_label(pos_line):
+        """위치도명 추출: '위치도 A', '위치도UL', 단독 영문자 등"""
+        for tok in pos_line:
+            tok_s = str(tok).strip()
+            m = re.search(r'위치도\s*([A-Za-z0-9_]+)', tok_s)
+            if m:
+                return m.group(1)
+        for tok in pos_line:
+            tok_s = str(tok).strip()
+            if re.fullmatch(r'[A-Za-z]{1,4}', tok_s) and tok_s.upper() not in ('X', 'Y'):
+                return tok_s.upper()
+        return None
+
     i = 0
     pt_num = 1
-    while i <= len(lines) - 3:
+    while i < len(lines):
         try:
+            # ── 최소 3줄 남아있어야 처리 가능
+            if i > len(lines) - 3:
+                break
+
             pos_line = lines[i]
             mmc_line = lines[i+1]
-            y_line   = lines[i+2]
+            next_line = lines[i+2]
 
-            if not is_num(y_line[0]):
+            # ── 4줄 세트 감지: i+3이 Y행, i+2가 X행
+            four_line = (
+                i <= len(lines) - 4
+                and is_x_row(next_line)
+                and is_y_row(lines[i+3])
+            )
+
+            # ── 3줄 세트 감지: i+2가 Y행(또는 숫자+Y혼합)
+            three_line = (not four_line) and is_y_row(next_line)
+
+            if not four_line and not three_line:
                 i += 1
                 continue
 
-            nom_y = clean_float(y_line[0]) or 0.0
-            nom_x = 0.0
+            # ── 포인트 라벨
+            lbl = extract_label(pos_line) or f"P{pt_num}"
 
-            ref_candidates = [v for v in pos_line if re.fullmatch(r'\d+', str(v))]
-            lbl = f"P{ref_candidates[0]}" if ref_candidates else f"P{pt_num}"
-
+            # ── 숫자 추출
             pos_nums = [clean_float(v) for v in pos_line if is_num(v)]
-
-            # [BUG FIX 2] 0값 제거 없이 전체 추출 → 인덱스 밀림 방지
             mmc_nums = [clean_float(v) for v in mmc_line if is_num(v)]
 
-            y_nums_all = [clean_float(v) for v in y_line if is_num(v)]
-
-            def tail(lst, n):
-                lst = [v for v in lst if v is not None]
-                if len(lst) >= n:
-                    return lst[-n:]
-                return lst
+            if four_line:
+                x_line = lines[i+2]
+                y_line = lines[i+3]
+                nom_x, ax_vals = extract_labeled_row(x_line, 'X')
+                nom_y, ay_vals = extract_labeled_row(y_line, 'Y')
+                step = 4
+            else:  # three_line
+                y_line = lines[i+2]
+                nom_y, ay_vals = extract_labeled_row(y_line, 'Y')
+                nom_x = 0.0
+                ax_vals = [0.0] * len(ay_vals)  # X없으면 0으로 채움
+                step = 3
 
             pos_vals = tail(pos_nums, sc)
             mmc_vals = tail(mmc_nums, sc)
-            y_vals   = tail(y_nums_all, sc)
+            ax_vals  = tail(ax_vals,  sc)
+            ay_vals  = tail(ay_vals,  sc)
 
-            n = min(sc, len(pos_vals), len(y_vals))
+            n = min(sc, len(pos_vals), len(ay_vals))
             if n == 0:
-                i += 3
+                i += step
                 continue
 
             for s in range(n):
-                pos_v = pos_vals[s] if s < len(pos_vals) else None
-
-                # [BUG FIX 2] 0이거나 None인 경우에만 m_ref로 대체
+                pos_v   = pos_vals[s] if s < len(pos_vals) else None
                 raw_mmc = mmc_vals[s] if s < len(mmc_vals) else None
-                mmc_v = raw_mmc if (raw_mmc is not None and raw_mmc > 0) else m_ref
+                mmc_v   = raw_mmc if (raw_mmc is not None and raw_mmc > 0) else m_ref
+                ax      = ax_vals[s] if s < len(ax_vals) else nom_x
+                ay      = ay_vals[s]
 
-                ay    = y_vals[s]
-
-                dx = 0.0
+                dx = round(ax - nom_x, 4)
                 dy = round(ay - nom_y, 4)
 
                 if pos_v is not None:
                     pos_result = round(pos_v, 4)
                 else:
-                    pos_result = round(abs(dy) * 2, 4)
+                    pos_result = round(np.sqrt(dx**2 + dy**2) * 2, 4)
 
                 bonus = round(max(0.0, mmc_v - m_ref), 4)
                 limit = round(tol + bonus, 4)
@@ -258,7 +346,7 @@ def parse_type_b(raw_input, sc, tol, m_ref):
                     "ID":    f"{lbl}_S{s+1}",
                     "NX":    nom_x,
                     "NY":    nom_y,
-                    "AX":    nom_x,
+                    "AX":    ax,
                     "AY":    ay,
                     "DIA":   mmc_v,
                     "POS":   pos_result,
@@ -267,7 +355,7 @@ def parse_type_b(raw_input, sc, tol, m_ref):
                 })
 
             pt_num += 1
-            i += 3
+            i += step
 
         except Exception:
             i += 1
@@ -375,7 +463,7 @@ def run_analysis():
 
     with st.sidebar:
         st.header("📋 보고서 설정")
-        mode  = st.radio("성적서 유형", ["유형 B (3줄: 위치도/MMC/Y)", "유형 A (3줄: 포인트명/X/Y)"])
+        mode  = st.radio("성적서 유형", ["유형 B (3줄/4줄 자동감지: 위치도/MMC/X?/Y)", "유형 A (3줄: 포인트명/X/Y)"])
         sc    = st.number_input("시료 수(Sample)", min_value=1, value=4)
         tol   = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f")
         m_ref = st.number_input("MMC 기준값(지름)", value=0.350, format="%.3f")
@@ -394,14 +482,21 @@ def run_analysis():
             """)
         else:
             st.caption("""
-**B유형 — 3줄 세트**
+**B유형 — 3줄/4줄 자동 감지 (혼재 가능)**
 ```
-줄1: Ø0.35  ...  위치도S1 위치도S2 ...
-줄2: Max0.41 ...  MMCS1  MMCS2 ...
-줄3: NomY  ...  Y_S1  Y_S2 ...
+[4줄: X+Y 둘 다]
+줄1: Ø공차  위치도명  위치도S1 ...
+줄2: Max...  MMC허용공차  MMCS1 ...
+줄3: X  X_S1  X_S2 ...
+줄4: Y  Y_S1  Y_S2 ...
+
+[3줄: Y만]
+줄1: Ø공차  Ref번호  위치도S1 ...
+줄2: Max...  MMC허용공차  MMCS1 ...
+줄3: NomY  Y  Y_S1  Y_S2 ...
 ```
-헤더(Nominal/DIM±Tolerance 줄) 제외 후
-데이터 행만 복사
+두 형식이 섞여 있어도 자동 구분됩니다.
+헤더 제외 후 데이터 행만 복사하세요.
             """)
 
     raw_input = st.text_area(
@@ -439,7 +534,7 @@ def run_analysis():
                     return
 
                 df = pd.DataFrame(results)
-                df['DX']  = 0.0
+                df['DX']  = (df['AX'] - df['NX']).round(4)
                 df['DY']  = (df['AY'] - df['NY']).round(4)
                 df['RES'] = np.where(df['POS'] <= df['LIMIT'], "✅ OK", "❌ NG")
 
@@ -449,13 +544,8 @@ def run_analysis():
 
             # ── 그래프 ────────────────────────────────────────
             st.divider()
-            if "A" in mode:
-                st.subheader("🎯 위치도 산포도 (2D)")
-                fig = draw_scatter_plot(df, tol)
-            else:
-                # [BUG FIX 3] B유형은 1D 바 차트 사용
-                st.subheader("🎯 위치도 편차 (Y방향 1D)")
-                fig = draw_1d_plot(df, tol)
+            st.subheader("🎯 위치도 산포도 (2D)")
+            fig = draw_scatter_plot(df, tol)
             st.pyplot(fig)
 
             # ── 통계 요약 ─────────────────────────────────────
