@@ -73,52 +73,72 @@ def run_data_converter():
         
         if st.button("🚀 데이터 변환 실행"):
             if raw_data:
-                # 1. 텍스트에서 모든 숫자와 문자열을 리스트화
-                raw_lines = raw_data.strip().split('\n')
-                lines = []
-                for line in raw_lines:
-                    # 탭이나 공백으로 나누고 진짜 값만 남김
-                    parts = [p.strip() for p in re.split(r'\t|\s{2,}', line) if p.strip()]
-                    if parts: lines.append(parts)
+                # 1. 모든 줄에서 숫자만 추출해서 리스트화
+                lines = raw_data.strip().split('\n')
+                data_pool = []
+                for line in lines:
+                    # 한 줄에서 숫자(소수점 포함)만 모두 찾아내기
+                    nums = re.findall(r'-?\d+\.?\d*', line)
+                    if len(nums) >= sample_count: # 샘플 수만큼 숫자가 있다면 데이터 줄로 간주
+                        data_pool.append([clean_float(n) for n in nums])
                 
-                # 2. 3줄씩 묶어서 처리하지 않고, '항목명'처럼 보이는 것이 나올 때마다 세트 시작
-                for i in range(len(lines)):
-                    # 현재 줄의 모든 칸 중 숫자가 아닌 문자열(항목명 후보) 찾기
-                    current_line = lines[i]
-                    item_name = ""
-                    for cell in current_line:
-                        # 한 글자 알파벳이거나 'A1' 형태인 경우
-                        if re.match(r'^[A-Za-z][0-9]*$', cell):
-                            item_name = cell
-                            break
+                # 2. 3줄씩 짝지어서 처리 (위치도/X/Y)
+                # 항목명은 데이터가 없으므로 임의로 P1, P2... 부여
+                for i in range(0, len(data_pool), 3):
+                    if i + 2 >= len(data_pool): break
                     
-                    # 항목명을 찾았고, 아래 최소 2줄이 더 있다면
-                    if item_name and i + 2 < len(lines):
+                    pos_row = data_pool[i]
+                    x_row = data_pool[i+1]
+                    y_row = data_pool[i+2]
+                    
+                    for s in range(sample_count):
                         try:
-                            # 각 줄에서 숫자들만 쏙쏙 뽑아내기
-                            # (도면치수, 실측1, 실측2, 실측3, 실측4...)
-                            def get_numbers(line):
-                                return [clean_float(x) for x in line if re.search(r'\d', x)]
-                            
-                            nums_pos = get_numbers(lines[i])   # 위치도 줄 숫자들
-                            nums_x   = get_numbers(lines[i+1]) # X좌표 줄 숫자들
-                            nums_y   = get_numbers(lines[i+2]) # Y좌표 줄 숫자들
-                            
-                            # 데이터가 충분한지 확인 (도면치수1 + 샘플n)
-                            if len(nums_x) > sample_count and len(nums_y) > sample_count:
-                                for s in range(sample_count):
-                                    # 보통 첫 번째 숫자가 도면치수(Nominal), 그 다음부터 실측치
-                                    processed_results.append({
-                                        "측정포인트": f"{item_name}_S{s+1}",
-                                        "기본공차": 0.35,
-                                        "도면치수_X": nums_x[0],
-                                        "도면치수_Y": nums_y[0],
-                                        "측정치_X": nums_x[s+1],
-                                        "측정치_Y": nums_y[s+1],
-                                        "실측지름_MMC용": nums_pos[s] if len(nums_pos) > s else 0.0
-                                    })
-                        except:
-                            continue
+                            # 덕인 양식 특징: [도면치수, 실측1, 실측2, 실측3, 실측4...]
+                            processed_results.append({
+                                "측정포인트": f"Point_{i//3 + 1}_S{s+1}",
+                                "기본공차": 0.35,
+                                "도면치수_X": x_row[0],
+                                "도면치수_Y": y_row[0],
+                                "측정치_X": x_row[s+1],
+                                "측정치_Y": y_row[s+1],
+                                "실측지름_MMC용": pos_row[s+1] if len(pos_row) > s+1 else 0.0
+                            })
+                        except: continue
+
+    # --- 방식 2: 엑셀 파일 직접 분석 ---
+    else:
+        up_file = st.file_uploader("CSV 파일을 업로드하세요", type=['csv'])
+        if up_file:
+            df = pd.read_csv(up_file, header=None).fillna(0)
+            if st.button("🚀 파일 변환 실행"):
+                # 숫자가 많이 들어있는 행만 골라내기
+                valid_rows = []
+                for idx, row in df.iterrows():
+                    nums = [clean_float(x) for x in row if str(x).replace('.','').replace('-','').isdigit()]
+                    if len(nums) >= sample_count:
+                        valid_rows.append(nums)
+                
+                for i in range(0, len(valid_rows), 3):
+                    if i + 2 >= len(valid_rows): break
+                    for s in range(sample_count):
+                        try:
+                            processed_results.append({
+                                "측정포인트": f"Point_{i//3 + 1}_S{s+1}",
+                                "기본공차": 0.35, "도면치수_X": valid_rows[i+1][0], "도면치수_Y": valid_rows[i+2][0],
+                                "측정치_X": valid_rows[i+1][s+1], "측정치_Y": valid_rows[i+2][s+1],
+                                "실측지름_MMC용": valid_rows[i][s+1]
+                            })
+                        except: continue
+
+    # 공통 출력
+    if processed_results:
+        df_final = pd.DataFrame(processed_results)
+        df_final.index = df_final.index + 1
+        st.success(f"✅ {len(processed_results)}개 변환 성공!")
+        st.dataframe(df_final, use_container_width=True)
+        st.session_state.data = df_final
+    else:
+        st.error("데이터를 찾지 못했습니다. 숫자가 포함된 실측 데이터 영역을 긁었는지 확인해주세요.")
 
     # --- 방식 2: 엑셀/CSV 업로드 ---
     else:
