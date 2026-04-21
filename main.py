@@ -7,7 +7,7 @@ import re
 # ==========================================
 # 1. 초기 설정 및 스타일
 # ==========================================
-st.set_page_config(page_title="Quality Analysis Hybrid v2.0", layout="wide")
+st.set_page_config(page_title="Quality Analysis Hybrid v2.1", layout="wide")
 
 def set_style():
     st.markdown("""
@@ -52,30 +52,20 @@ def run_integrated_analysis():
         try:
             results = []
             
-            # -------------------------------------------
             # 유형 B 로직 (참조 코드의 황금 인덱스 복구)
-            # -------------------------------------------
             if mode == "유형 B (가로 데이터)":
-                # 공백 또는 탭으로 분리하여 리스트화
                 lines = [re.split(r'\s+', l.strip()) for l in raw_input.strip().split('\n') if l.strip()]
-                
                 for i in range(0, len(lines), 4):
                     if i+3 >= len(lines): break
-                    
-                    # 도면값(Nominal)은 무조건 각 데이터 줄의 첫 번째 숫자 (index 0)
                     try:
                         nom_x = float(re.sub(r'[^0-9\.\-]', '', lines[i+2][0]))
                         nom_y = float(re.sub(r'[^0-9\.\-]', '', lines[i+3][0]))
-                        
                         pin_label = lines[i][0] if "PIN" in str(lines[i]) else f"P{i//4 + 1}"
                         
                         for s in range(sc):
-                            # [핵심] 이전에 잘 나오던 '뒤에서부터 샘플 가져오기' 인덱스 방식
                             idx = -(sc - s)
-                            
                             act_x = float(re.sub(r'[^0-9\.\-]', '', lines[i+2][idx]))
                             act_y = float(re.sub(r'[^0-9\.\-]', '', lines[i+3][idx]))
-                            # MMC 값도 같은 위치에서 추출
                             dia_val = float(re.sub(r'[^0-9\.\-]', '', lines[i+1][idx])) if len(lines[i+1]) > abs(idx) else 0.35
                             
                             results.append({
@@ -87,15 +77,12 @@ def run_integrated_analysis():
                     except (IndexError, ValueError):
                         continue
 
-            # -------------------------------------------
-            # 유형 A 로직 (3줄 세트 정밀 파싱)
-            # -------------------------------------------
+            # 유형 A 로직
             else:
                 lines = [line.strip() for line in raw_input.split('\n') if line.strip()]
                 rows = []
                 for line in lines:
                     nums = [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', line)]
-                    # 좌표 튐 현상 보정 (150 이상 수치는 나머지 연산)
                     nums = [n if abs(n) < 150 else n % 100 for n in nums]
                     if nums: rows.append(nums)
 
@@ -110,12 +97,50 @@ def run_integrated_analysis():
                             "지름_MMC": dia_vals[s-1] if (s-1) < len(dia_vals) else dia_vals[-1]
                         })
 
-            # 데이터프레임 생성 및 계산
+            # 데이터 가공 및 계산
             df = pd.DataFrame(results)
             df['편차_X'] = (df['측정_X'] - df['도면_X']).round(4)
             df['편차_Y'] = (df['측정_Y'] - df['도면_Y']).round(4)
             df['위치도'] = (np.sqrt(df['편차_X']**2 + df['편차_Y']**2) * 2).round(4)
             
-            # 보너스 공차 계산
+            # --- 에러 발생했던 지점 수정 완료 ---
             if mode == "유형 A (3줄 세트)":
-                df['보너스'] = (df['
+                df['보너스'] = (df['지름_MMC'] - mmc_ref).clip(lower=0).round(4)
+            else:
+                df['보너스'] = (df['지름_MMC'] - 0.35).clip(lower=0).round(4)
+            # ---------------------------------
+                
+            df['최종공차'] = (tol + df['보너스']).round(4)
+            df['판정'] = np.where(df['위치도'] <= df['최종공차'], "✅ OK", "❌ NG")
+
+            # 시각화 (Plotly)
+            max_total_tol = df['최종공차'].max()
+            if view_mode == "자동(권장)":
+                view_limit = round((max_total_tol / 2) * 1.5, 2)
+
+            fig = go.Figure()
+            r_blue, r_red = tol / 2, max_total_tol / 2
+            
+            fig.add_shape(type="circle", x0=-r_blue, y0=-r_blue, x1=r_blue, y1=r_blue, line=dict(color="RoyalBlue", width=2.5), fillcolor="rgba(65, 105, 225, 0.05)")
+            fig.add_shape(type="circle", x0=-r_red, y0=-r_red, x1=r_red, y1=r_red, line=dict(color="Red", width=2, dash="dot"))
+
+            for res, color in zip(["✅ OK", "❌ NG"], ["#2ecc71", "#e74c3c"]):
+                sub = df[df['판정'] == res]
+                if not sub.empty:
+                    fig.add_trace(go.Scatter(x=sub['편차_X'], y=sub['편차_Y'], mode='markers+text', name=res,
+                                             text=sub['측정포인트'], textposition="top center",
+                                             marker=dict(size=12, color=color, line=dict(width=1, color="white"))))
+
+            fig.update_layout(width=750, height=750, template="plotly_white",
+                              xaxis=dict(range=[-view_limit, view_limit], zeroline=True, title="X Deviation"),
+                              yaxis=dict(range=[-view_limit, view_limit], zeroline=True, title="Y Deviation"))
+            
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 결과 리포트
+            st.info(f"📌 **품질 요약** | 기본공차: Ø{tol:.3f} / 최대합격원: Ø{max_total_tol:.3f}")
+            
+            ng_list = df[df['판정'] == "❌ NG"]
+            if not ng_list.empty:
+                st.error(f"🚨 **규격 이탈(NG) 상세 리스트**")
+                ng_html = "".join([f"<p style='color: #d32f2f; margin: 4px 0;'>• <b>{r['측정포인트']}</b>: {r['위치도']:.3f} (규격 Ø{r['최종공차']:.3f} 대비 <b>{r['위치도']-r['
