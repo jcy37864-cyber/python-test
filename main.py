@@ -69,62 +69,90 @@ def run_data_converter():
     processed_results = []
 
     if input_method == "텍스트 붙여넣기":
-        raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, 
-                                 placeholder="A, B, C 항목명이 포함되게 긁어서 붙여넣으세요.")
+        raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300)
         
         if st.button("🚀 데이터 변환 실행"):
             if raw_data:
-                # 1. 텍스트를 줄 단위로 나누고 각 줄을 다시 칸 단위로 나눔
+                # 1. 텍스트 정리 (탭이나 여러 개의 공백을 구분자로 사용)
                 lines = []
                 for row in raw_data.strip().split('\n'):
-                    # 탭 또는 공백 2개 이상으로 분리
                     cols = re.split(r'\t|\s{2,}', row.strip())
-                    lines.append(cols)
+                    # 빈 칸 제거하고 실제 데이터만 남기기
+                    cols = [c.strip() for c in cols if c.strip()]
+                    if cols: lines.append(cols)
                 
-                # 2. 항목명(A, B, C...) 찾기 로직
+                # 2. 항목명(A, B, C...) 기반 데이터 매칭
                 for i in range(len(lines)):
-                    current_line = lines[i]
+                    line = lines[i]
                     
-                    # 한 글자 알파벳(A, B, C...)이나 'A1' 같은 패턴이 있는지 확인
+                    # [핵심] 줄의 첫 번째 칸이 딱 '한 글자 알파벳'인 경우 (A, B, C...)
+                    # 또는 항목명이 포함된 위치를 유연하게 찾음
                     item_name = ""
-                    for cell in current_line[:4]: # 앞쪽 4칸 중 이름이 있는지 검사
-                        clean_val = cell.strip()
-                        # 숫자가 아니고, 비어있지 않으며, 길이가 짧은(항목명 특성) 문자열 확인
-                        if clean_val and not re.match(r'^-?\d', clean_val) and len(clean_val) <= 3:
-                            if clean_val not in ["위치도", "SPEC", "측정구간"]: # 키워드 제외
-                                item_name = clean_val
-                                break
+                    if len(line[0]) == 1 and line[0].isalpha():
+                        item_name = line[0]
                     
-                    # 항목명을 찾았다면 그 줄(위치도), 다음줄(X), 그다음줄(Y) 읽기
                     if item_name:
                         try:
-                            # 데이터가 부족할 수 있으므로 에러 방지 처리
-                            if i + 2 >= len(lines): continue
+                            # 현재 줄: 위치도 / i+1: X / i+2: Y
+                            # 사용자 파일 구조상 데이터는 이름 바로 뒤에 나열됨
+                            pos_vals = lines[i][1:]
+                            x_vals = lines[i+1]
+                            y_vals = lines[i+2]
                             
-                            row_pos = lines[i]
-                            row_x = lines[i+1]
-                            row_y = lines[i+2]
-                            
-                            # X, Y 도면치수(Nominal) 추출 (각 줄에서 숫자가 가장 먼저 나오는 칸)
-                            nom_x = clean_float(next((v for v in row_x if re.search(r'\d', v)), 0))
-                            nom_y = clean_float(next((v for v in row_y if re.search(r'\d', v)), 0))
+                            # X와 Y줄에서 첫 번째 숫자는 보통 '도면치수(Nominal)'
+                            nom_x = clean_float(x_vals[0])
+                            nom_y = clean_float(y_vals[0])
 
                             for s in range(sample_count):
-                                # 오른쪽 끝에서부터 샘플 개수만큼 데이터 추출
-                                # (시료 데이터는 항상 행의 끝부분에 몰려있음)
-                                idx = -(sample_count - s)
-                                
+                                # 시료 데이터는 도면치수 다음부터 순서대로 가져옴
+                                # 보통 x_vals[1]이 1-1, x_vals[2]가 1-2...
                                 processed_results.append({
                                     "측정포인트": f"{item_name}_S{s+1}",
                                     "기본공차": 0.35,
                                     "도면치수_X": nom_x,
                                     "도면치수_Y": nom_y,
-                                    "측정치_X": clean_float(row_x[idx]),
-                                    "측정치_Y": clean_float(row_y[idx]),
-                                    "실측지름_MMC용": clean_float(row_pos[idx])
+                                    "측정치_X": clean_float(x_vals[s+1]),
+                                    "측정치_Y": clean_float(y_vals[s+1]),
+                                    "실측지름_MMC용": clean_float(pos_vals[s])
                                 })
                         except:
                             continue
+
+    # --- 방식 2: 엑셀/CSV 업로드 (파일 내부 구조에 맞춰 정밀 수정) ---
+    else:
+        up_file = st.file_uploader("CSV 파일을 업로드하세요", type=['csv'])
+        if up_file:
+            df_csv = pd.read_csv(up_file, header=None)
+            if st.button("🚀 파일 변환 실행"):
+                for i in range(len(df_csv)):
+                    # 열을 순회하며 A, B, C 같은 항목명 찾기
+                    for col in range(df_csv.shape[1]):
+                        val = str(df_csv.iloc[i, col]).strip()
+                        if len(val) == 1 and val.isalpha():
+                            try:
+                                item_name = val
+                                # 항목명 오른쪽 칸부터 데이터 시작
+                                for s in range(sample_count):
+                                    processed_results.append({
+                                        "측정포인트": f"{item_name}_S{s+1}",
+                                        "기본공차": 0.35, "도면치수_X": 0.0, "도면치수_Y": 0.0,
+                                        "측정치_X": clean_float(df_csv.iloc[i+1, col+s+1]),
+                                        "측정치_Y": clean_float(df_csv.iloc[i+2, col+s+1]),
+                                        "실측지름_MMC용": clean_float(df_csv.iloc[i, col+s+1])
+                                    })
+                                break # 항목 찾았으면 다음 행으로
+                            except: continue
+
+    # 공통 출력
+    if processed_results:
+        df_result = pd.DataFrame(processed_results)
+        df_result.index = df_result.index + 1
+        st.success(f"✅ {len(processed_results)}개 데이터 변환 성공!")
+        st.dataframe(df_result, use_container_width=True)
+        st.session_state.data = df_result
+        st.balloons()
+    else:
+        st.warning("데이터를 찾지 못했습니다. 복사 범위를 확인해 주세요.")
 
     # --- 방식 2: 엑셀/CSV 업로드 (기본 구조는 유지하되 검증 강화) ---
     else:
