@@ -73,48 +73,99 @@ def run_data_converter():
         
         if st.button("🚀 데이터 변환 실행"):
             if raw_data:
-                # 1. 텍스트를 줄 단위로 나누고, 빈 칸을 제거한 실제 값만 리스트로 만듦
-                all_lines = []
-                for line in raw_data.strip().split('\n'):
-                    # 탭 또는 공백 2개 이상으로 분리 후 빈 값 제거
-                    cols = [c.strip() for c in re.split(r'\t|\s{2,}', line) if c.strip()]
-                    all_lines.append(cols)
+                # 1. 텍스트에서 모든 숫자와 문자열을 리스트화
+                raw_lines = raw_data.strip().split('\n')
+                lines = []
+                for line in raw_lines:
+                    # 탭이나 공백으로 나누고 진짜 값만 남김
+                    parts = [p.strip() for p in re.split(r'\t|\s{2,}', line) if p.strip()]
+                    if parts: lines.append(parts)
                 
-                # 2. 데이터 탐색
-                for i in range(len(all_lines)):
-                    line = all_lines[i]
-                    if not line: continue
-                    
-                    # [핵심] 줄 안에 'A', 'B', 'C' 같은 한 글자 항목명이 있는지 확인
+                # 2. 3줄씩 묶어서 처리하지 않고, '항목명'처럼 보이는 것이 나올 때마다 세트 시작
+                for i in range(len(lines)):
+                    # 현재 줄의 모든 칸 중 숫자가 아닌 문자열(항목명 후보) 찾기
+                    current_line = lines[i]
                     item_name = ""
-                    item_index = -1
-                    for idx, val in enumerate(line):
-                        if len(val) == 1 and val.isalpha(): # 한 글자 알파벳 찾기
-                            item_name = val
-                            item_index = idx
+                    for cell in current_line:
+                        # 한 글자 알파벳이거나 'A1' 형태인 경우
+                        if re.match(r'^[A-Za-z][0-9]*$', cell):
+                            item_name = cell
                             break
                     
-                    # 항목명을 찾았고, 아래에 X, Y줄이 더 있다면
-                    if item_name and i + 2 < len(all_lines):
+                    # 항목명을 찾았고, 아래 최소 2줄이 더 있다면
+                    if item_name and i + 2 < len(lines):
                         try:
-                            # 현재 줄(위치도), 다음줄(X), 그 다음줄(Y)
-                            row_pos = all_lines[i]
-                            row_x = all_lines[i+1]
-                            row_y = all_lines[i+2]
+                            # 각 줄에서 숫자들만 쏙쏙 뽑아내기
+                            # (도면치수, 실측1, 실측2, 실측3, 실측4...)
+                            def get_numbers(line):
+                                return [clean_float(x) for x in line if re.search(r'\d', x)]
                             
-                            # 데이터 추출 (항목명 바로 다음 칸부터 샘플 데이터라고 가정)
-                            # 만약 위치가 밀린다면 row_x[item_index + 1] 방식으로 접근
-                            for s in range(sample_count):
-                                processed_results.append({
-                                    "측정포인트": f"{item_name}_S{s+1}",
-                                    "기본공차": 0.35,
-                                    "도면치수_X": clean_float(row_x[item_index]), 
-                                    "도면치수_Y": clean_float(row_y[item_index]),
-                                    "측정치_X": clean_float(row_x[item_index + s + 1]),
-                                    "측정치_Y": clean_float(row_y[item_index + s + 1]),
-                                    "실측지름_MMC용": clean_float(row_pos[item_index + s + 1])
-                                })
+                            nums_pos = get_numbers(lines[i])   # 위치도 줄 숫자들
+                            nums_x   = get_numbers(lines[i+1]) # X좌표 줄 숫자들
+                            nums_y   = get_numbers(lines[i+2]) # Y좌표 줄 숫자들
+                            
+                            # 데이터가 충분한지 확인 (도면치수1 + 샘플n)
+                            if len(nums_x) > sample_count and len(nums_y) > sample_count:
+                                for s in range(sample_count):
+                                    # 보통 첫 번째 숫자가 도면치수(Nominal), 그 다음부터 실측치
+                                    processed_results.append({
+                                        "측정포인트": f"{item_name}_S{s+1}",
+                                        "기본공차": 0.35,
+                                        "도면치수_X": nums_x[0],
+                                        "도면치수_Y": nums_y[0],
+                                        "측정치_X": nums_x[s+1],
+                                        "측정치_Y": nums_y[s+1],
+                                        "실측지름_MMC용": nums_pos[s] if len(nums_pos) > s else 0.0
+                                    })
+                        except:
+                            continue
+
+    # --- 방식 2: 엑셀/CSV 업로드 ---
+    else:
+        up_file = st.file_uploader("CSV 파일을 업로드하세요", type=['csv'])
+        if up_file:
+            df = pd.read_csv(up_file, header=None).fillna("")
+            if st.button("🚀 파일 변환 실행"):
+                for i in range(len(df)):
+                    # 줄 전체에서 알파벳 항목명 찾기
+                    row_list = df.iloc[i].astype(str).tolist()
+                    item_name = ""
+                    for cell in row_list:
+                        cell_s = cell.strip()
+                        if re.match(r'^[A-Za-z][0-9]*$', cell_s):
+                            item_name = cell_s
+                            break
+                    
+                    if item_name and i + 2 < len(df):
+                        try:
+                            # 해당 행부터 숫자 데이터 추출
+                            def extract_nums(row_idx):
+                                row = df.iloc[row_idx].astype(str).tolist()
+                                return [clean_float(x) for x in row if re.search(r'\d', x)]
+                            
+                            n_p = extract_nums(i)
+                            n_x = extract_nums(i+1)
+                            n_y = extract_nums(i+2)
+                            
+                            if len(n_x) > sample_count:
+                                for s in range(sample_count):
+                                    processed_results.append({
+                                        "측정포인트": f"{item_name}_S{s+1}",
+                                        "기본공차": 0.35, "도면치수_X": n_x[0], "도면치수_Y": n_y[0],
+                                        "측정치_X": n_x[s+1], "측정치_Y": n_y[s+1],
+                                        "실측지름_MMC용": n_p[s] if len(n_p) > s else 0.0
+                                    })
                         except: continue
+
+    # 공통 출력
+    if processed_results:
+        df_final = pd.DataFrame(processed_results)
+        df_final.index = df_final.index + 1
+        st.success(f"✅ {len(processed_results)}개 데이터 변환 성공!")
+        st.dataframe(df_final, use_container_width=True)
+        st.session_state.data = df_final
+    elif (input_method == "텍스트 붙여넣기" and 'raw_data' in locals() and raw_data):
+        st.error("데이터 구조를 인식할 수 없습니다. '측정구간'부터 '실측치'까지 넉넉하게 복사해주세요.")
 
     else:
         up_file = st.file_uploader("CSV 파일을 업로드하세요", type=['csv'])
