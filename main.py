@@ -31,32 +31,55 @@ def clean_float(value):
 # ==========================================
 def parse_dukin_engine(lines, sample_count):
     processed = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        # 항목명(A, B, C...) 찾기
-        item_name = next((str(c).strip() for c in line if len(str(c).strip()) == 1 and str(c).strip().isalpha()), None)
-        
-        if item_name and i + 2 < len(lines):
-            try:
-                def get_nums(row): return [clean_float(v) for v in row if re.search(r'\d', str(v))]
-                nums_p, nums_x, nums_y = get_nums(lines[i]), get_nums(lines[i+1]), get_nums(lines[i+2])
+    # 1. 텍스트 라인을 데이터 리스트로 정밀 변환
+    data_grid = []
+    for line in lines:
+        if isinstance(line, list):
+            row = [str(x).strip() for x in line if str(x).strip()]
+        else:
+            row = re.split(r'\t|\s{2,}', str(line).strip())
+            row = [x for x in row if x]
+        if row: data_grid.append(row)
 
-                if len(nums_x) > 1:
-                    for s in range(sample_count):
+    # 2. 3행 유효성 검사 및 추출
+    i = 0
+    while i < len(data_grid) - 2:
+        row1, row2, row3 = data_grid[i], data_grid[i+1], data_grid[i+2]
+        
+        # 첫 번째 행에 영문자(항목명)가 있는지 확인
+        item_match = next((x for x in row1 if x.isalpha() and len(x) == 1), None)
+        
+        if item_match:
+            def extract_numbers(row):
+                # 숫자, 소수점, 마이너스 기호만 추출
+                nums = []
+                for val in row:
+                    found = re.findall(r'[-+]?\d*\.\d+|\d+', val)
+                    nums.extend([float(f) for f in found])
+                return nums
+
+            nums_p = extract_numbers(row1) # 지름/MMC용
+            nums_x = extract_numbers(row2) # X 좌표
+            nums_y = extract_numbers(row3) # Y 좌표
+
+            # 최소 도면치수 1개 + 측정치 1개는 있어야 계산 가능
+            if len(nums_x) >= 2 and len(nums_y) >= 2:
+                for s in range(sample_count):
+                    try:
                         processed.append({
-                            "측정포인트": f"{item_name}_S{s+1}",
-                            "기본공차": 0.35,
-                            "도면치수_X": nums_x[0], "도면치수_Y": nums_y[0],
+                            "측정포인트": f"{item_match}_S{s+1}",
+                            "도면치수_X": nums_x[0],
+                            "도면치수_Y": nums_y[0],
                             "측정치_X": nums_x[s+1] if len(nums_x) > s+1 else nums_x[-1],
                             "측정치_Y": nums_y[s+1] if len(nums_y) > s+1 else nums_y[-1],
                             "실측지름_MMC용": nums_p[s+1] if len(nums_p) > s+1 else nums_p[-1]
                         })
-                i += 3
-            except: i += 1
-        else: i += 1
+                    except Exception: continue
+            i += 3 # 성공 시 3행 건너뜀
+        else:
+            i += 1 # 실패 시 한 행씩 내려가며 탐색
+            
     return processed
-
 # ==========================================
 # 3. 메인 앱 레이아웃
 # ==========================================
