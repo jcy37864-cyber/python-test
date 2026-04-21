@@ -75,7 +75,7 @@ if raw_input:
         # 빨간색 텍스트 (보너스가 있을 때만 표시)
         if max_total_tol > tol:
             fig.add_annotation(x=display_r_red*0.7, y=-display_r_red*0.7, text=f"최종(MMC): Ø{max_total_tol:.3f}",
-                               showarrow=False, font=dict(color="Red", size=12, byte=True), bgcolor="white")
+                               showarrow=False, font=dict(color="Red", size=12), bgcolor="white")
 
         # 데이터 점 찍기
         for res in ["✅ OK", "❌ NG"]:
