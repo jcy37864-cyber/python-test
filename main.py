@@ -5,21 +5,21 @@ import plotly.graph_objects as go
 import re
 
 def run_position_analysis():
-    st.subheader("🎯 위치도 정밀 분석 (모든 편의기능 복구)")
+    st.subheader("🎯 위치도 정밀 분석 (자동 범위 & 수동 줌)")
 
     # 1. 설정 영역
     with st.expander("⚙️ 분석 기준 설정", expanded=True):
         col1, col2, col3 = st.columns(3)
         with col1:
-            sc = st.number_input("샘플 수 (S1~S4 기준 4)", min_value=1, value=4, key="sc_v6")
-            tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f", key="tol_v6")
+            sc = st.number_input("샘플 수 (S1~S4 기준 4)", min_value=1, value=4, key="sc_v8")
+            tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f", key="tol_v8")
         with col2:
-            mmc_ref = st.number_input("MMC 기준치", value=0.060, format="%.3f", key="mmc_v6")
+            mmc_ref = st.number_input("MMC 기준치", value=0.060, format="%.3f", key="mmc_v8")
         with col3:
-            std_range = round(tol, 2)
-            view_mode = st.radio("그래프 범위", ["표준(권장)", "수동 조절"], horizontal=True, key="mode_v6")
-            view_limit = std_range if view_mode == "표준(권장)" else st.slider("범위 조절", 0.1, 5.0, std_range, step=0.1, key="zoom_v6")
-
+            # --- [핵심 수정: 자동 범위 계산 로직] ---
+            # 나중에 데이터가 들어오면 이 값을 기준으로 자동 범위를 잡습니다.
+            view_mode = st.radio("그래프 범위", ["자동(권장)", "수동 조절"], horizontal=True, key="mode_v8")
+            
     # 2. 데이터 입력
     raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=200, placeholder="표 데이터를 복사해서 넣어주세요.")
 
@@ -27,7 +27,7 @@ def run_position_analysis():
         st.info("💡 데이터를 입력하면 실시간으로 분석 그래프가 생성됩니다.")
         return
 
-    # 3. 데이터 분석 로직
+    # 3. 데이터 분석 로직 (이전과 동일)
     try:
         lines = [line.strip() for line in raw_input.split('\n') if line.strip()]
         rows = []
@@ -55,28 +55,38 @@ def run_position_analysis():
         df['최종공차'] = (tol + df['보너스']).round(4)
         df['판정'] = np.where(df['위치도'] <= df['최종공차'], "✅ OK", "❌ NG")
 
-        # 4. 그래프 시각화 (범위 밖 타점 처리 포함)
-        fig = go.Figure()
-        r_blue = tol / 2
-        fig.add_shape(type="circle", x0=-r_blue, y0=-r_blue, x1=r_blue, y1=r_blue, line=dict(color="RoyalBlue", width=2.5), fillcolor="rgba(65, 105, 225, 0.05)")
-        
+        # --- [범위 결정 로직] ---
         max_total_tol = df['최종공차'].max()
+        # 자동일 때는 가장 큰 원(빨간 원)의 반지름보다 20% 더 여유 있게 잡음
+        auto_limit = round((max_total_tol / 2) * 1.2, 2)
+        
+        if view_mode == "자동(권장)":
+            view_limit = auto_limit
+        else:
+            # 수동일 때는 덕인님이 직접 줌을 조절 (기존 줌 느낌 유지)
+            view_limit = st.slider("줌 조절 (±mm)", 0.1, 5.0, 0.5, step=0.1, key="zoom_v8")
+
+        # 4. 그래프 시각화
+        fig = go.Figure()
+        
+        # 기본 공차 원 (파란색)
+        r_blue = tol / 2
+        fig.add_shape(type="circle", x0=-r_blue, y0=-r_blue, x1=r_blue, y1=r_blue,
+                      line=dict(color="RoyalBlue", width=2.5), fillcolor="rgba(65, 105, 225, 0.05)")
+        
+        # 최종 공차 원 (빨간색)
         r_red = max_total_tol / 2
-        fig.add_shape(type="circle", x0=-r_red, y0=-r_red, x1=r_red, y1=r_red, line=dict(color="Red", width=2, dash="dot"))
+        fig.add_shape(type="circle", x0=-r_red, y0=-r_red, x1=r_red, y1=r_red,
+                      line=dict(color="Red", width=2, dash="dot"))
 
-        # 범위 밖 타점 리스트 수집
+        # 타점 표시
         out_of_view = []
-
         for res in ["✅ OK", "❌ NG"]:
             sub = df[df['판정'] == res]
-            # 화면 안에 있는 것만 점으로 표시
             vis = sub[(sub['편차_X'].abs() <= view_limit) & (sub['편차_Y'].abs() <= view_limit)]
-            # 화면 밖에 있는 것들 수집
             inv = sub[(sub['편차_X'].abs() > view_limit) | (sub['편차_Y'].abs() > view_limit)]
             
-            if not inv.empty:
-                out_of_view.extend(inv['측정포인트'].tolist())
-
+            if not inv.empty: out_of_view.extend(inv['측정포인트'].tolist())
             if not vis.empty:
                 fig.add_trace(go.Scatter(x=vis['편차_X'], y=vis['편차_Y'], mode='markers+text', name=res, 
                                          text=vis['측정포인트'], textposition="top center",
@@ -86,26 +96,17 @@ def run_position_analysis():
                           yaxis=dict(range=[-view_limit, view_limit], zeroline=True), plot_bgcolor='white')
         st.plotly_chart(fig, use_container_width=True)
 
-        # 5. [복구] 범위 밖 알림 및 NG 스크롤 리스트
+        # 5. 하단 리스트 및 알림 (이전과 동일)
         if out_of_view:
-            st.warning(f"⚠️ **그래프 범위 밖 타점 ({len(out_of_view)}개):** {', '.join(out_of_view)}")
-            st.caption("그래프 범위를 조절하면 모든 타점을 확인할 수 있습니다.")
-
-        st.info(f"📌 **품질 요약** | 도면공차: Ø{tol:.3f} / 최대합격(MMC): Ø{max_total_tol:.3f}")
+            st.warning(f"⚠️ **현재 줌 범위 밖 타점:** {', '.join(out_of_view)}")
+        
+        st.info(f"📌 **품질 요약** | 기본공차: Ø{tol:.3f} / 최대합격원(빨간색): Ø{max_total_tol:.3f}")
         
         ng_list = df[df['판정'] == "❌ NG"]
         if not ng_list.empty:
             st.error(f"🚨 **규격 이탈(NG) 상세 리스트**")
-            ng_html = ""
-            for _, row in ng_list.iterrows():
-                excess = row['위치도'] - row['최종공차']
-                ng_html += f"<p style='color: #d32f2f; margin: 4px 0;'>• <b>{row['측정포인트']}</b>: {row['위치도']:.3f} (규격 Ø{row['최종공차']:.3f} 대비 <b>{excess:.3f} 초과</b>)</p>"
-            
-            st.markdown(f"""
-                <div style='height: 180px; overflow-y: auto; border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: #fff5f5;'>
-                    {ng_html}
-                </div>
-            """, unsafe_allow_html=True)
+            ng_html = "".join([f"<p style='color: #d32f2f; margin: 4px 0;'>• <b>{r['측정포인트']}</b>: {r['위치도']:.3f} (규격 Ø{r['최종공차']:.3f} 대비 <b>{r['위치도']-r['최종공차']:.3f} 초과</b>)</p>" for _, r in ng_list.iterrows()])
+            st.markdown(f"<div style='height: 180px; overflow-y: auto; border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: #fff5f5;'>{ng_html}</div>", unsafe_allow_html=True)
         else:
             st.success("✅ 모든 시료가 최종 합격 범위 내에 있습니다.")
 
