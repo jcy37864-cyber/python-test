@@ -105,52 +105,53 @@ def main():
             if 'analysed_data' in st.session_state:
                 st.subheader("🎯 위치도 산포도 (Target Map)")
                 ad = st.session_state.analysed_data
-                base_r = base_tol / 2
+                base_r = base_tol / 2  # 기본 공차 반지름
                 
                 fig = go.Figure()
 
-                # --- 1. 과녁 배경 (허용부 색상 채우기) ---
-                fig.add_shape(type="circle", xref="x", yref="y",
-                              x0=-base_r, y0=-base_r, x1=base_r, y1=base_r, 
-                              fillcolor="rgba(52, 152, 219, 0.2)", 
-                              line=dict(color="RoyalBlue", width=2))
+                # --- 1. 과녁 배경 (원형 허용 구역 채우기) ---
+                # 이 부분이 빠지면 과녁이 보이지 않습니다.
+                fig.add_shape(
+                    type="circle",
+                    xref="x", yref="y",
+                    x0=-base_r, y0=-base_r, x1=base_r, y1=base_r,
+                    fillcolor="rgba(52, 152, 219, 0.3)", # 더 선명한 파란색 채우기
+                    line=dict(color="RoyalBlue", width=3), # 테두리 강조
+                    layer="below" # 점보다 아래에 그려지게 설정
+                )
 
                 # --- 2. 데이터 포인트 (OK/NG 분리) ---
-                ok_df = ad[ad['판정'] == "✅ OK"]
-                if not ok_df.empty:
-                    fig.add_trace(go.Scatter(
-                        x=ok_df['실측_X'] - ok_df['도면_X'],
-                        y=ok_df['실측_Y'] - ok_df['도면_Y'],
-                        mode='markers', name='✅ OK',
-                        marker=dict(color='#2ecc71', size=11, line=dict(color='white', width=1)),
-                        text=ok_df['항목'],
-                        hovertemplate="<b>%{text}</b><br>X 편차: %{x:.4f}<br>Y 편차: %{y:.4f}<extra></extra>"
-                    ))
+                for p_label, p_color, p_status in [("✅ OK", "#2ecc71", "✅ OK"), ("❌ NG", "#e74c3c", "❌ NG")]:
+                    subset = ad[ad['판정'] == p_status]
+                    if not subset.empty:
+                        fig.add_trace(go.Scatter(
+                            x=subset['실측_X'] - subset['도면_X'],
+                            y=subset['실측_Y'] - subset['도면_Y'],
+                            mode='markers',
+                            name=p_label,
+                            marker=dict(color=p_color, size=12, line=dict(color='white', width=1)),
+                            text=subset['항목'],
+                            hovertemplate="<b>%{text}</b><br>X편차: %{x:.4f}<br>Y편차: %{y:.4f}<extra></extra>"
+                        ))
 
-                ng_df = ad[ad['판정'] == "❌ NG"]
-                if not ng_df.empty:
-                    fig.add_trace(go.Scatter(
-                        x=ng_df['실측_X'] - ng_df['도면_X'],
-                        y=ng_df['실측_Y'] - ng_df['도면_Y'],
-                        mode='markers', name='❌ NG',
-                        marker=dict(color='#e74c3c', size=11, line=dict(color='white', width=1)),
-                        text=ng_df['항목'],
-                        hovertemplate="<b>%{text}</b><br>X 편차: %{x:.4f}<br>Y 편차: %{y:.4f}<extra></extra>"
-                    ))
-
-                # --- 3. 레이아웃 설정 ---
+                # --- 3. 축 및 레이아웃 설정 (과녁이 잘 보이게 범위 조정) ---
                 dev_x = ad['실측_X'] - ad['도면_X']
                 dev_y = ad['실측_Y'] - ad['도면_Y']
-                lim = max(dev_x.abs().max(), dev_y.abs().max(), base_r) * 1.4
-                
+                # 데이터가 너무 멀리 있으면 과녁이 작게 보이므로 범위를 적절히 제한
+                max_dev = max(dev_x.abs().max(), dev_y.abs().max(), base_r * 2)
+                lim = max_dev * 1.2
+
                 fig.update_layout(
-                    xaxis=dict(range=[-lim, lim], zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#f0f0f0'),
-                    yaxis=dict(range=[-lim, lim], zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#f0f0f0'),
-                    width=700, height=700, plot_bgcolor='white', showlegend=True,
-                    title_text=f"X-Y Deviation (Tolerance: Ø{base_tol})", title_x=0.5
+                    xaxis=dict(range=[-lim, lim], zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#eee', title="X 편차"),
+                    yaxis=dict(range=[-lim, lim], zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#eee', title="Y 편차"),
+                    width=800, height=800,
+                    plot_bgcolor='white',
+                    showlegend=True,
+                    title_text=f"🎯 위치도 분석 과녁 (공차 범위: Ø{base_tol})",
+                    title_x=0.5
                 )
+
                 st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
 
     # --- Tab 3: 통계 리포트 ---
     with tab3:
