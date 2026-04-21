@@ -85,15 +85,43 @@ def run_data_converter():
                         nom_x = clean_float(next((v for v in x_line if re.search(r'\d', str(v))), 0))
                         nom_y = clean_float(next((v for v in y_line if re.search(r'\d', str(v))), 0))
 
-                        for s in range(sample_count):
-                            idx = -(sample_count - s)
-                            processed_results.append({
-                                "측정포인트": f"{pin_line[0]}_S{s+1}",
-                                "기본공차": 0.35, "도면치수_X": nom_x, "도면치수_Y": nom_y,
-                                "측정치_X": clean_float(x_line[idx]), "측정치_Y": clean_float(y_line[idx]),
-                                "실측지름_MMC용": clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
-                            })
-                    except: continue
+                        # --- 데이터 추출 로직 개선 버전 ---
+                for i in range(len(lines)):
+                    line = lines[i]
+                    # 줄 바꿈이나 빈 줄 스킵
+                    if not line or len(line) < 2: continue
+                    
+                    # [핵심] '측정구간' 열에서 항목명(알파벳 A, B, C... 혹은 이름) 찾기
+                    # 보통 항목 이름은 숫자가 아닌 문자로 시작합니다.
+                    item_name = str(line[0]).strip() if input_method == "텍스트 붙여넣기" else str(line[0]).strip()
+                    
+                    # 항목명이 있고(비어있지 않고), 숫자가 아닌 경우에만 '데이터 시작줄'로 인식
+                    if item_name and not re.match(r'^-?\d', item_name) and item_name != 'nan':
+                        try:
+                            # 현재 줄: 위치도 / i+1줄: X좌표 / i+2줄: Y좌표
+                            pos_line = lines[i]
+                            x_line = lines[i+1]
+                            y_line = lines[i+2]
+                            
+                            # 도면치수(Nominal) 추출
+                            nom_x = clean_float(next((v for v in x_line if re.search(r'\d', str(v))), 0))
+                            nom_y = clean_float(next((v for v in y_line if re.search(r'\d', str(v))), 0))
+
+                            for s in range(sample_count):
+                                # 뒤에서부터 샘플 개수만큼 데이터 추출
+                                idx = -(sample_count - s)
+                                
+                                processed_results.append({
+                                    "측정포인트": f"{item_name}_S{s+1}",
+                                    "기본공차": 0.35,
+                                    "도면치수_X": nom_x,
+                                    "도면치수_Y": nom_y,
+                                    "측정치_X": clean_float(x_line[idx]),
+                                    "측정치_Y": clean_float(y_line[idx]),
+                                    "실측지름_MMC용": clean_float(pos_line[idx])
+                                })
+                        except Exception:
+                            continue
 
     # --- 방식 2: 엑셀/CSV 업로드 (오늘 추가된 덕인 좌표형 로직) ---
     else:
