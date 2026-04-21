@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import re
 
 # 1. 초기 설정 및 테마 적용
-st.set_page_config(page_title="Quality Hub Pro v2.10", layout="wide")
+st.set_page_config(page_title="Quality Hub Pro v2.8", layout="wide")
 
 def set_style():
     st.markdown("""
@@ -19,6 +19,7 @@ def set_style():
 def run_analysis():
     set_style()
     st.title("🎯 품질 측정 위치도 분석 리포트")
+    st.subheader("상급자 보고 및 공정 능력 확인용")
 
     with st.sidebar:
         st.header("📋 보고서 설정")
@@ -26,6 +27,8 @@ def run_analysis():
         sc = st.number_input("시료 수(Sample)", min_value=1, value=4)
         tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f")
         m_ref = st.number_input("MMC 기준값", value=0.060 if mode == "유형 A (3줄 세트)" else 0.350, format="%.3f")
+        st.divider()
+        st.info("💡 TIP: NG 발생 시 그래프에 빨간색 다이아몬드로 크게 표시됩니다.")
 
     raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=250)
     
@@ -38,9 +41,18 @@ def run_analysis():
                 for i in range(0, len(lines), 4):
                     if i + 3 >= len(lines): break
                     
+                    # --- [복구 핵심] 데이터 왜곡 보정 로직 (그림 2처럼 뭉치게) ---
                     def clean_v(lst, idx):
                         v = re.sub(r'[^0-9\.\-]', '', lst[idx])
-                        return float(v) if v and v != '-' else 0.0
+                        try:
+                            val = float(v) if v and v != '-' else 0.0
+                            # 200mm 초과 수치는 %100으로 나머지 연산하여 축에 뭉치게 함
+                            if abs(val) > 200:
+                                val %= 100
+                            return val
+                        except Exception:
+                            return 0.0
+                    # -----------------------------------------------------------------
 
                     try:
                         nx, ny = clean_v(lines[i+2], 0), clean_v(lines[i+3], 0)
@@ -57,6 +69,7 @@ def run_analysis():
                 rows = []
                 for l in lines:
                     nums = [float(v) for v in re.findall(r'[-+]?\d*\.\d+|\d+', l)]
+                    # 유형 A 좌표 복정 로직 그대로 유지
                     rows.append([v if abs(v) < 150 else v % 100 for v in nums])
                 rows = [r for r in rows if r]
                 for i in range(0, len(rows) // 3 * 3, 3):
@@ -68,41 +81,34 @@ def run_analysis():
                 st.error("데이터를 분석할 수 없습니다.")
                 return
 
-            # 데이터 가공 및 판정
             df['DX'], df['DY'] = (df['AX'] - df['NX']).round(4), (df['AY'] - df['NY']).round(4)
             df['POS'] = (np.sqrt(df['DX']**2 + df['DY']**2) * 2).round(4)
             df['BONUS'] = (df['DIA'] - m_ref).clip(lower=0).round(4)
             df['LIMIT'] = (tol + df['BONUS']).round(4)
             df['RES'] = np.where(df['POS'] <= df['LIMIT'], "✅ OK", "❌ NG")
 
-            # --- [시각화 강화] 상급자 보고용 자동 스케일 및 NG 라벨링 최적화 ---
+            # --- [시각화 복구] 상급자 보고용 자동 스케일 (그림 2처럼) ---
             max_limit = df['LIMIT'].max()
-            v_l = round(max_limit * 0.8, 2)
+            v_l = round(max_limit * 0.7, 2) # 공차 원이 화면에 꽉 차보이게 스케일 조정 (그림 2처럼 줌인)
+            
             fig = go.Figure()
             
             # 가이드 원 그리기
             fig.add_shape(type="circle", x0=-tol/2, y0=-tol/2, x1=tol/2, y1=tol/2, line=dict(color="#1A237E", width=3), fillcolor="rgba(26, 35, 126, 0.05)")
             fig.add_shape(type="circle", x0=-max_limit/2, y0=-max_limit/2, x1=max_limit/2, y1=max_limit/2, line=dict(color="#D32F2F", width=2, dash="dash"))
             
-            # --- 수정된 타점 설정 부분: NG 라벨만 유지 ---
+            # 타점 설정 (그림 2처럼 십자 모양 뭉침 유지)
             for r, c, sz, sym in zip(["✅ OK", "❌ NG"], ["#4CAF50", "#FF0000"], [10, 16], ["circle", "diamond"]):
                 pdf = df[df['RES'] == r]
                 if not pdf.empty:
-                    # OK 포인트는 텍스트를 공백으로 설정하여 라벨 제거 (이로써 겹침 해결)
-                    if r == "✅ OK":
-                        trace_text = [""] * len(pdf)
-                    else:
-                        trace_text = pdf['ID']
-
                     fig.add_trace(go.Scatter(
                         x=pdf['DX'], y=pdf['DY'],
                         mode='markers+text',
                         name=r,
-                        text=trace_text, # 조건에 따른 텍스트 설정
+                        text=pdf['ID'],
                         textposition="top center",
                         marker=dict(size=sz, color=c, symbol=sym, line=dict(width=1.5, color="black" if r=="❌ NG" else "white"))
                     ))
-            # -----------------------------------------------
 
             fig.update_layout(
                 width=800, height=800, template="plotly_white",
@@ -112,13 +118,10 @@ def run_analysis():
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- 결과 요약 창 강화 ---
-            col1, col2 = st.columns([3, 1])
+            # --- 하단 결과 요약 창 그대로 유지 ---
+            col1, col2 = st.columns([2, 1])
             with col1:
-                # 결과 테이블을 조금 더 직관적으로 표시
-                display_df = df[['ID', 'POS', 'BONUS', 'LIMIT', 'RES']].copy()
-                display_df.columns = ['ID', '위치도(Ø)', '보너스(+Ø)', '규격(Ø)', '판정']
-                st.dataframe(display_df, use_container_width=True)
+                st.dataframe(df[['ID', 'POS', 'BONUS', 'LIMIT', 'RES']], use_container_width=True)
             
             with col2:
                 ng_df = df[df['RES'] == "❌ NG"]
