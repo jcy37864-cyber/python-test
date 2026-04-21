@@ -69,59 +69,67 @@ def run_data_converter():
     processed_results = []
 
     if input_method == "텍스트 붙여넣기":
-        raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="측정구간(A, B, C...) 열부터 끝까지 복사해서 붙여넣으세요.")
+        raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="항목명(A, B, C...) 줄부터 끝까지 드래그해서 붙여넣으세요.")
         
         if st.button("🚀 데이터 변환 실행"):
             if raw_data:
-                # 탭이나 공백으로 분리
-                lines = [re.split(r'\t', line.strip()) for line in raw_data.strip().split('\n')]
+                # 1. 탭으로 먼저 나누고, 안되면 공백 2개 이상으로 나눔
+                lines = []
+                for line in raw_data.strip().split('\n'):
+                    split_line = line.split('\t')
+                    if len(split_line) <= 1:
+                        split_line = re.split(r'\s{2,}', line.strip())
+                    lines.append(split_line)
                 
-                # 데이터 탐색 루프
+                # 2. 데이터 탐색 (A, B, C... 항목명 찾기)
                 for i in range(len(lines)):
-                    current_line = lines[i]
-                    if len(current_line) < 2: continue
+                    line = lines[i]
+                    if len(line) < 2: continue
                     
-                    # [핵심] 줄의 앞부분에서 항목명(A, B, C...) 찾기
-                    # 숫자가 아닌 문자(항목명)가 들어있는 줄을 '기준점'으로 잡습니다.
-                    target_cell = str(current_line[0]).strip()
-                    if target_cell and not re.match(r'^-?\d', target_cell) and target_cell != 'nan':
+                    # 각 줄의 모든 칸을 뒤져서 단일 알파벳(A, B, C...)이나 항목명 패턴 찾기
+                    item_name = ""
+                    for cell in line[:3]: # 보통 앞쪽 3칸 안에 이름이 있음
+                        val = str(cell).strip()
+                        # 한 글자 알파벳이거나, 'A'로 시작하는 짧은 문자열인 경우
+                        if val and not re.match(r'^-?\d', val) and len(val) < 5:
+                            item_name = val
+                            break
+                    
+                    # 항목명을 찾았다면 해당 줄(위치도), i+1(X), i+2(Y) 추출
+                    if item_name:
                         try:
-                            # 기준줄(i): 위치도 / 아래줄(i+1): X좌표 / 그 아래줄(i+2): Y좌표
-                            item_name = target_cell
                             pos_line = lines[i]
                             x_line = lines[i+1]
                             y_line = lines[i+2]
                             
-                            # 도면치수(Nominal)는 숫자가 처음 나타나는 칸에서 추출
+                            # 숫자가 포함된 칸 중 '도면치수(Nominal)' 후보 찾기 (앞쪽에서)
                             nom_x = clean_float(next((v for v in x_line if re.search(r'\d', str(v))), 0))
                             nom_y = clean_float(next((v for v in y_line if re.search(r'\d', str(v))), 0))
 
                             for s in range(sample_count):
-                                # 오른쪽 끝에서부터 샘플 개수만큼 데이터 가져오기
+                                # 오른쪽 끝에서부터 거꾸로 샘플 데이터 추출
                                 idx = -(sample_count - s)
                                 
                                 processed_results.append({
                                     "측정포인트": f"{item_name}_S{s+1}",
                                     "기본공차": 0.35,
-                                    "도면치수_X": nom_x,
-                                    "도면치수_Y": nom_y,
+                                    "도면치수_X": nom_x, "도면치수_Y": nom_y,
                                     "측정치_X": clean_float(x_line[idx]),
                                     "측정치_Y": clean_float(y_line[idx]),
                                     "실측지름_MMC용": clean_float(pos_line[idx])
                                 })
-                        except Exception:
-                            continue # 줄이 모자라면 다음으로 패스
+                        except: continue
 
-    # --- (방식 2: 엑셀/CSV 업로드 로직은 기존과 동일하게 유지) ---
+    # --- 방식 2: 엑셀/CSV 업로드 (동일하게 유지) ---
     else:
         up_file = st.file_uploader("CSV 파일을 업로드하세요", type=['csv'])
         if up_file:
             df_csv = pd.read_csv(up_file, header=None)
             if st.button("🚀 파일 변환 실행"):
-                for i in range(0, len(df_csv), 3):
+                for i in range(len(df_csv)):
                     try:
                         item_name = str(df_csv.iloc[i, 0]).strip()
-                        if not item_name or item_name == 'nan': continue
+                        if not item_name or item_name == 'nan' or re.match(r'^-?\d', item_name): continue
                         for s in range(sample_count):
                             col_idx = s + 1
                             processed_results.append({
@@ -132,6 +140,18 @@ def run_data_converter():
                                 "실측지름_MMC용": clean_float(df_csv.iloc[i, col_idx])
                             })
                     except: continue
+
+    # 공통 출력 부분
+    if processed_results:
+        df_result = pd.DataFrame(processed_results)
+        df_result.index = df_result.index + 1
+        st.success(f"✅ {len(processed_results)}개 데이터 변환 성공!")
+        st.dataframe(df_result, use_container_width=True)
+        st.session_state.data = df_result
+        st.balloons()
+    elif (input_method == "텍스트 붙여넣기" and 'raw_data' in locals() and raw_data) or \
+         (input_method == "엑셀/CSV 업로드" and 'up_file' in locals() and up_file):
+        st.error("데이터를 분석할 수 없습니다. 항목명(A, B, C...)이 포함되도록 다시 복사해주세요.")
 
     # 공통 결과 출력 (함수 가장 하단)
     if processed_results:
