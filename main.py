@@ -7,109 +7,112 @@ from io import BytesIO
 
 # 1. 스타일 설정
 def init_app():
-    st.set_page_config(page_title="덕인 성적서 완벽 분석 v13.0", layout="wide")
+    st.set_page_config(page_title="덕인 성적서 완벽 분석 v14.0", layout="wide")
     st.markdown("""
         <style>
-        .stButton > button { background-color: #ef4444 !important; color: white !important; font-weight: bold; height: 3em; width: 100%; }
-        .stDataFrame { border: 1px solid #e2e8f0; }
+        .stButton > button { background-color: #ef4444 !important; color: white !important; font-weight: bold; height: 3.5em; width: 100%; }
+        .main { background-color: #f8fafc; }
         </style>
     """, unsafe_allow_html=True)
 
-# 2. 핵심 파싱 엔진 (이 부분이 이번 해결의 열쇠입니다)
-def parse_dukin_ultra(raw_text, sample_count):
+# 2. 최신 파싱 엔진 (행 단위 추적 방식)
+def parse_dukin_v14(raw_text, sample_count):
     processed = []
+    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
     
-    # 텍스트에서 불필요한 따옴표 제거
-    raw_text = raw_text.replace('"', '')
-    
-    # [핵심] 항목명(A~L)을 기준으로 데이터를 쪼갭니다. 
-    # 앞뒤에 뭐가 붙어있든 알파벳 한 글자 단독 존재를 찾아냅니다.
-    items = re.split(r'\s+([A-L])\s+', " " + raw_text + " ")
-    
-    # 쪼개진 데이터가 [빈값, 'A', '데이터', 'B', '데이터'...] 형태가 됩니다.
-    for i in range(1, len(items), 2):
-        name = items[i].strip()
-        content = items[i+1]
+    i = 0
+    while i < len(lines):
+        curr_line = lines[i]
         
-        # 해당 구역에서 숫자(소수점, 마이너스 포함)만 싹 다 뽑습니다.
-        nums = re.findall(r'[-+]?\d*\.\d+|\d+', content)
-        nums = [float(n) for n in nums]
+        # [패턴] 줄 어딘가에 대문자 A-L이 단독으로 있는지 확인
+        # "위치도 A 0.069..." 형태나 "A 0.069..." 형태 모두 대응
+        match = re.search(r'(?:\s|^)([A-L])(?:\s|$|\t)', curr_line)
         
-        # 덕인 구조: [도면치수1개 + 샘플치수 n개] 가 한 세트
-        # 보통 3세트(지름, X, Y)가 나옵니다.
-        step = 1 + sample_count 
-        
-        if len(nums) >= step * 2: # 최소 X, Y 데이터는 있어야 함
+        if match and i + 2 < len(lines):
             try:
-                # 데이터가 3세트 이상이면 맨 앞 세트는 지름(P)으로 간주
-                if len(nums) >= step * 3:
-                    p_offset, x_offset, y_offset = 0, step, step * 2
-                else:
-                    p_offset, x_offset, y_offset = -1, 0, step
+                name = match.group(1) # 찾은 항목명 (A, B, C...)
                 
-                for s in range(sample_count):
-                    processed.append({
-                        "항목": f"{name}_S{s+1}",
-                        "도면_X": nums[x_offset],
-                        "도면_Y": nums[y_offset],
-                        "측정_X": nums[x_offset + 1 + s],
-                        "측정_Y": nums[y_offset + 1 + s],
-                        "실측지름": nums[p_offset + 1 + s] if p_offset != -1 else 0.0
-                    })
-            except Exception:
-                continue
+                # 숫자만 추출하는 도우미 함수
+                def extract_nums(text):
+                    return [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', text)]
+
+                nums_p = extract_nums(lines[i])   # 현재 줄 (P 또는 위치도)
+                nums_x = extract_nums(lines[i+1]) # 다음 줄 (X)
+                nums_y = extract_nums(lines[i+2]) # 다다음 줄 (Y)
+
+                # 한 행에 [도면값 + 샘플값들] 구조인지 확인
+                # 최소 2개(도면1, 샘플1)는 있어야 함
+                if len(nums_x) >= 2 and len(nums_y) >= 2:
+                    for s in range(sample_count):
+                        processed.append({
+                            "항목": f"{name}_S{s+1}",
+                            "도면_X": nums_x[0],
+                            "도면_Y": nums_y[0],
+                            "실측_X": nums_x[s+1] if len(nums_x) > s+1 else nums_x[-1],
+                            "실측_Y": nums_y[s+1] if len(nums_y) > s+1 else nums_y[-1],
+                            "실측지름": nums_p[s+1] if len(nums_p) > s+1 else 0.0
+                        })
+                    i += 3 # 3행 세트 처리 완료했으니 점프
+                else:
+                    i += 1
+            except:
+                i += 1
+        else:
+            i += 1
     return processed
 
 # 3. 메인 앱 실행
 def main():
     init_app()
-    st.title("🚀 덕인 위치도 정밀 분석 솔루션 v13.0")
+    st.title("🚀 덕인 위치도 마스터 v14.0")
     
-    tab1, tab2, tab3 = st.tabs(["📥 1. 데이터 입력", "📊 2. 위치도 분석", "📈 3. 결과 리포트"])
+    t1, t2, t3 = st.tabs(["📥 1. 데이터 입력", "📊 2. 위치도 분석", "📈 3. 리포트"])
 
-    with tab1:
-        st.write("성적서 텍스트를 아래에 붙여넣으세요.")
-        sc = st.number_input("🔢 샘플(캐비티) 수", min_value=1, value=4)
-        raw_input = st.text_area("텍스트 데이터", height=300, placeholder="A 0.123 0.456...")
+    with t1:
+        st.info("성적서를 전체 복사해서 아래에 붙여넣으세요. (v14.0은 항목명을 기준으로 3행씩 자동 분석합니다)")
+        sc = st.number_input("🔢 샘플(캐비티) 수 설정", min_value=1, value=4)
+        raw_input = st.text_area("텍스트 데이터 붙여넣기", height=350)
         
-        if st.button("🚀 데이터 분석 시작") and raw_input:
-            data_list = parse_dukin_ultra(raw_input, sc)
-            if data_list:
-                st.session_state.df = pd.DataFrame(data_list)
-                st.success(f"✅ 총 {len(data_list)}개 포인트 인식 성공!")
-                st.dataframe(st.session_state.df, use_container_width=True)
+        if st.button("🚀 데이터 분석 및 표 생성") and raw_input:
+            data = parse_dukin_v14(raw_input, sc)
+            if data:
+                st.session_state.master_df = pd.DataFrame(data)
+                st.success(f"✅ {len(data)}개의 포인트를 정상적으로 읽었습니다!")
+                st.dataframe(st.session_state.master_df, use_container_width=True)
             else:
-                st.error("❌ 데이터를 인식하지 못했습니다. 항목명(A, B...)이 포함되어 있나요?")
+                st.error("❌ 데이터를 인식하지 못했습니다. 항목명(A, B...) 형식을 확인해 주세요.")
 
-    with tab2:
-        if 'df' in st.session_state:
-            df = st.session_state.df.copy()
-            st.write("### 위치도 계산 및 판정")
+    with t2:
+        if 'master_df' in st.session_state:
+            df = st.session_state.master_df.copy()
+            st.write("### ⚙️ 공차 설정 및 계산")
             c1, c2 = st.columns(2)
-            mmc_val = c1.number_input("📏 MMC 기준", value=0.350, format="%.3f")
-            tol_val = c2.number_input("📐 기본 공차", value=0.350, format="%.3f")
+            base_mmc = c1.number_input("📏 MMC 기준값", value=0.350, format="%.3f")
+            base_tol = c2.number_input("📐 기본 공차값", value=0.350, format="%.3f")
 
-            if st.button("🔍 결과 산출"):
-                # 위치도 공식
-                df['위치도'] = (2 * np.sqrt((df['측정_X'] - df['도면_X'])**2 + (df['측정_Y'] - df['도면_Y'])**2)).round(4)
-                df['보너스'] = (df['실측지름'] - mmc_val).clip(lower=0).round(4)
-                df['최종공차'] = (tol_val + df['보너스']).round(4)
+            if st.button("🔍 위치도 계산 실행"):
+                # 위치도 공식: 2 * sqrt( (실측X-도면X)^2 + (실측Y-도면Y)^2 )
+                df['위치도'] = (2 * np.sqrt((df['실측_X'] - df['도면_X'])**2 + (df['실측_Y'] - df['도면_Y'])**2)).round(4)
+                df['보너스'] = (df['실측지름'] - base_mmc).clip(lower=0).round(4)
+                df['최종공차'] = (base_tol + df['보너스']).round(4)
                 df['판정'] = np.where(df['위치도'] <= df['최종공차'], "OK", "NG")
-                st.session_state.res = df
-                st.dataframe(df, use_container_width=True)
+                st.session_state.final_res = df
+                
+                # 결과 테이블 출력 (NG는 빨간색)
+                st.dataframe(df.style.apply(lambda x: ["background-color: #ffcccc" if v == "NG" else "" for v in x], axis=1), use_container_width=True)
         else:
-            st.warning("1단계에서 데이터를 먼저 로드해 주세요.")
+            st.warning("데이터 로드 탭에서 먼저 분석을 진행해 주세요.")
 
-    with tab3:
-        if 'res' in st.session_state:
-            res = st.session_state.res
-            ok_n = (res['판정'] == "OK").sum()
-            st.metric("합격률", f"{(ok_n/len(res))*100:.1f}%", f"{ok_n}/{len(res)}")
+    with t3:
+        if 'final_res' in st.session_state:
+            res = st.session_state.final_res
+            ok_cnt = (res['판정'] == "OK").sum()
+            st.metric("최종 합격률", f"{(ok_cnt/len(res))*100:.1f}%", f"{ok_cnt}/{len(res)} 개 합격")
             
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 res.to_excel(writer, index=False)
-            st.download_button("📥 엑셀로 저장", output.getvalue(), "Quality_Analysis.xlsx")
+            st.download_button("📥 엑셀 파일 다운로드", output.getvalue(), "Dukin_Result.xlsx")
 
 if __name__ == "__main__":
     main()
