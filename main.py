@@ -5,8 +5,29 @@ import plotly.graph_objects as go
 import re
 
 st.set_page_config(page_title="덕인 위치도 분석기", layout="wide")
-st.title("🎯 위치도 정밀 분석 (빨간 원 가이드 고정)")
 
+# --- 1. 기준 설정 (사이드바) ---
+with st.sidebar:
+    st.header("⚙️ 기준 설정")
+    sc = st.number_input("샘플 수", min_value=1, value=4)
+    tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f")
+    mmc_ref = st.number_input("MMC 기준치", value=0.060, format="%.3f")
+    
+    st.divider()
+    
+    # [핵심] 표준 구간 가이드
+    std_range = round((tol / 2) * 2, 2) # 기본 공차 반지름의 2배를 표준으로 설정
+    st.write(f"📍 **권장 표준 범위: ±{std_range}mm**")
+    
+    zoom_mode = st.radio("그래프 보기 모드", ["표준(권장)", "사용자 정의"])
+    
+    if zoom_mode == "표준(권장)":
+        view_limit = std_range
+    else:
+        view_limit = st.slider("범위 수동 조절(±mm)", 0.1, 5.0, std_range, step=0.1)
+
+# --- 2. 데이터 분석 및 그래프 로직 ---
+# (데이터 파싱 및 계산 로직은 이전과 동일)
 def parse_smart_data(raw_text, sc):
     nums = [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', raw_text)]
     if not nums: return None
@@ -30,19 +51,13 @@ def parse_smart_data(raw_text, sc):
         except: break
     return results
 
-with st.sidebar:
-    st.header("⚙️ 기준 설정")
-    sc = st.number_input("샘플 수", min_value=1, value=4)
-    tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f")
-    mmc_ref = st.number_input("MMC 기준치", value=0.060, format="%.3f")
-    zoom_range = st.slider("그래프 보기 범위(±mm)", 0.1, 2.0, 0.7, step=0.1)
-
-raw_input = st.text_area("데이터 붙여넣기", height=150)
+raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=150)
 
 if raw_input:
     data = parse_smart_data(raw_input, sc)
     if data:
         df = pd.DataFrame(data)
+        # ... (계산식 생략: 위치도, 보너스, 최종공차 계산) ...
         df['편차_X'] = (df['측정_X'] - df['도면_X']).round(4)
         df['편차_Y'] = (df['측정_Y'] - df['도면_Y']).round(4)
         df['위치도'] = (np.sqrt(df['편차_X']**2 + df['편차_Y']**2) * 2).round(4)
@@ -52,41 +67,35 @@ if raw_input:
 
         fig = go.Figure()
         
-        # 1. 파란색 실선 (기본 공차)
-        r_base = tol / 2
-        fig.add_shape(type="circle", x0=-r_base, y0=-r_base, x1=r_base, y1=r_base,
+        # 파란 원 (기본)
+        fig.add_shape(type="circle", x0=-tol/2, y0=-tol/2, x1=tol/2, y1=tol/2,
                       line=dict(color="RoyalBlue", width=2), fillcolor="rgba(65, 105, 225, 0.1)")
 
-        # 2. 빨간색 점선 (최종 합격선) - 화면 크기에 맞춰서 강제 조정
+        # 빨간 원 (보너스 포함 합격선) - 화면 밖으로 나가면 테두리에 고정
         actual_max_r = df['최종공차'].max() / 2
-        # 만약 실제 빨간 원이 화면(zoom_range)보다 크다면, 화면 테두리에 맞춰서 그려줌
-        display_max_r = min(actual_max_r, zoom_range * 0.95) 
-        
+        display_max_r = min(actual_max_r, view_limit * 0.98)
         fig.add_shape(type="circle", x0=-display_max_r, y0=-display_max_r, x1=display_max_r, y1=display_max_r,
-                      line=dict(color="Red", width=3, dash="dot"))
+                      line=dict(color="Red", width=2, dash="dot"))
 
-        # 3. 데이터 점 (화면 안쪽 시료만 표시)
-        in_bounds = df[(df['편차_X'].abs() <= zoom_range) & (df['편차_Y'].abs() <= zoom_range)]
+        # 데이터 점 찍기
         for res in ["✅ OK", "❌ NG"]:
-            sub = in_bounds[in_bounds['판정'] == res]
-            if not sub.empty:
+            sub = df[df['판정'] == res]
+            # 화면 안에 있는 점들만 그래프에 표시
+            visible = sub[(sub['편차_X'].abs() <= view_limit) & (sub['편차_Y'].abs() <= view_limit)]
+            if not visible.empty:
                 fig.add_trace(go.Scatter(
-                    x=sub['편차_X'], y=sub['편차_Y'], mode='markers+text', name=res,
-                    text=sub['측정포인트'], textposition="top center",
-                    marker=dict(size=12, color="#2ecc71" if res=="✅ OK" else "#e74c3c", line=dict(width=1, color="white"))
+                    x=visible['편차_X'], y=visible['편차_Y'], mode='markers+text', name=res,
+                    text=visible['측정포인트'], textposition="top center",
+                    marker=dict(size=10, color="#2ecc71" if res=="✅ OK" else "#e74c3c")
                 ))
 
         fig.update_layout(
-            width=700, height=700, 
-            xaxis=dict(range=[-zoom_range, zoom_range], zeroline=True),
-            yaxis=dict(range=[-zoom_range, zoom_range], zeroline=True),
-            title=f"🎯 위치도 분석 (최대 합격선: Ø{df['최종공차'].max():.3f})"
+            width=700, height=700,
+            xaxis=dict(range=[-view_limit, view_limit], title="X 편차"),
+            yaxis=dict(range=[-view_limit, view_limit], title="Y 편차"),
+            title=f"🎯 위치도 분석 (현재 보기 범위: ±{view_limit}mm)"
         )
-
         st.plotly_chart(fig)
         
-        # 빨간 원 상태 알림
-        if actual_max_r > zoom_range:
-            st.info(f"💡 현재 실제 합격 원(Ø{df['최종공차'].max():.3f})이 너무 커서 화면 테두리에 맞춰 표시했습니다.")
-        
-        st.dataframe(df[['측정포인트', '위치도', '보너스', '최종공차', '판정']])
+        if actual_max_r > view_limit:
+            st.warning(f"⚠️ 실제 합격 한계(Ø{df['최종공차'].max():.3f})가 보기 범위보다 큽니다. 빨간 점선은 화면 테두리에 표시되었습니다.")
