@@ -62,6 +62,7 @@ def run_data_converter():
     col_opt1, col_opt2 = st.columns([1, 2])
     with col_opt1:
         input_method = st.radio("입력 방식 선택", ["텍스트 붙여넣기", "엑셀/CSV 업로드"])
+        # 보내주신 데이터는 시료가 4개(A 옆에 4개의 숫자)이므로 기본값 4
         sample_count = st.number_input("🔢 샘플(캐비티) 수", min_value=1, max_value=20, value=4)
     with col_opt2:
         st.info(f"💡 현재 **{sample_count}개**의 샘플을 추출하도록 설정되었습니다.")
@@ -73,37 +74,88 @@ def run_data_converter():
         
         if st.button("🚀 데이터 변환 실행"):
             if raw_data:
-                # 1. 모든 줄에서 숫자만 추출해서 리스트화
-                lines = raw_data.strip().split('\n')
-                data_pool = []
-                for line in lines:
-                    # 한 줄에서 숫자(소수점 포함)만 모두 찾아내기
-                    nums = re.findall(r'-?\d+\.?\d*', line)
-                    if len(nums) >= sample_count: # 샘플 수만큼 숫자가 있다면 데이터 줄로 간주
-                        data_pool.append([clean_float(n) for n in nums])
+                # 1. 줄 단위로 나누고 각 줄의 공백/탭 정리
+                raw_lines = raw_data.strip().split('\n')
+                lines = []
+                for r in raw_lines:
+                    cols = [c.strip() for c in re.split(r'\t|\s{2,}', r) if c.strip()]
+                    if cols: lines.append(cols)
                 
-                # 2. 3줄씩 짝지어서 처리 (위치도/X/Y)
-                # 항목명은 데이터가 없으므로 임의로 P1, P2... 부여
-                for i in range(0, len(data_pool), 3):
-                    if i + 2 >= len(data_pool): break
+                # 2. 항목명(A, B, C...) 기반 정밀 추적
+                for i in range(len(lines)):
+                    line = lines[i]
                     
-                    pos_row = data_pool[i]
-                    x_row = data_pool[i+1]
-                    y_row = data_pool[i+2]
+                    # 줄의 어딘가에 한 글자 알파벳(항목명)이 있는지 확인
+                    item_name = ""
+                    start_idx = -1
+                    for idx, cell in enumerate(line):
+                        if len(cell) == 1 and cell.isalpha():
+                            item_name = cell
+                            start_idx = idx
+                            break
                     
-                    for s in range(sample_count):
+                    # 항목명을 찾았다면 그 줄(위치도), i+1(X), i+2(Y)를 가져옴
+                    if item_name and i + 2 < len(lines):
                         try:
-                            # 덕인 양식 특징: [도면치수, 실측1, 실측2, 실측3, 실측4...]
-                            processed_results.append({
-                                "측정포인트": f"Point_{i//3 + 1}_S{s+1}",
-                                "기본공차": 0.35,
-                                "도면치수_X": x_row[0],
-                                "도면치수_Y": y_row[0],
-                                "측정치_X": x_row[s+1],
-                                "측정치_Y": y_row[s+1],
-                                "실측지름_MMC용": pos_row[s+1] if len(pos_row) > s+1 else 0.0
-                            })
+                            # 각 행에서 숫자 데이터만 추출
+                            # row_p: [위치도값들], row_x: [X값들], row_y: [Y값들]
+                            row_p = lines[i][start_idx+1:]
+                            row_x = lines[i+1]
+                            row_y = lines[i+2]
+                            
+                            for s in range(sample_count):
+                                processed_results.append({
+                                    "측정포인트": f"{item_name}_S{s+1}",
+                                    "기본공차": 0.35,
+                                    # X/Y 줄의 첫번째 숫자는 도면치수(Nominal), 그 다음부터 실측치
+                                    "도면치수_X": clean_float(row_x[0]),
+                                    "도면치수_Y": clean_float(row_y[0]),
+                                    "측정치_X": clean_float(row_x[s+1]),
+                                    "측정치_Y": clean_float(row_y[s+1]),
+                                    "실측지름_MMC용": clean_float(row_p[s+1]) if len(row_p) > s+1 else clean_float(row_p[s])
+                                })
                         except: continue
+
+    # (방식 2: 엑셀 업로드는 방식 1과 동일한 로직 적용)
+    else:
+        up_file = st.file_uploader("CSV 파일을 업로드하세요", type=['csv'])
+        if up_file:
+            df = pd.read_csv(up_file, header=None).fillna("")
+            if st.button("🚀 파일 변환 실행"):
+                for i in range(len(df)):
+                    row = [str(x).strip() for x in df.iloc[i]]
+                    item_name = ""; start_idx = -1
+                    for idx, val in enumerate(row):
+                        if len(val) == 1 and val.isalpha():
+                            item_name = val; start_idx = idx; break
+                    
+                    if item_name and i+2 < len(df):
+                        try:
+                            row_p = [str(x) for x in df.iloc[i, start_idx+1:] if str(x).strip()]
+                            row_x = [str(x) for x in df.iloc[i+1] if str(x).strip()]
+                            row_y = [str(x) for x in df.iloc[i+2] if str(x).strip()]
+                            for s in range(sample_count):
+                                processed_results.append({
+                                    "측정포인트": f"{item_name}_S{s+1}",
+                                    "기본공차": 0.35,
+                                    "도면치수_X": clean_float(row_x[0]),
+                                    "도면치수_Y": clean_float(row_y[0]),
+                                    "측정치_X": clean_float(row_x[s+1]),
+                                    "측정치_Y": clean_float(row_y[s+1]),
+                                    "실측지름_MMC용": clean_float(row_p[s+1]) if len(row_p) > s+1 else clean_float(row_p[s])
+                                })
+                        except: continue
+
+    # --- 공통 출력 부분 ---
+    if processed_results:
+        df_res = pd.DataFrame(processed_results)
+        df_res.index = df_res.index + 1
+        st.success(f"✅ {len(processed_results)}개 변환 성공! 분석 탭으로 이동하세요.")
+        st.dataframe(df_res, use_container_width=True)
+        st.session_state.data = df_res
+        st.balloons()
+    elif (input_method == "텍스트 붙여넣기" and 'raw_data' in locals() and raw_data):
+        st.error("데이터를 찾을 수 없습니다. A, B, C 등 항목명이 포함되게 복사했는지 확인해주세요.")
 
     # --- 방식 2: 엑셀 파일 직접 분석 ---
     else:
