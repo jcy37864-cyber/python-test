@@ -6,12 +6,12 @@ import re
 
 def run_position_analysis():
     st.set_page_config(page_title="위치도 분석 시스템", layout="wide")
-    st.subheader("🎯 위치도 정밀 분석 (통합 최종본)")
+    st.subheader("🎯 위치도 정밀 분석 (유형 B 시각화 최적화)")
 
     if 'analyzed' not in st.session_state: st.session_state.analyzed = False
 
-    with st.expander("⚙️ 양식 및 기준 설정", expanded=True):
-        data_type = st.radio("데이터 양식 선택", ["📍 유형 A (좌표 방식)", "📊 유형 B (MMC공차 기입 방식)"], horizontal=True)
+    with st.expander("⚙️ 설정", expanded=True):
+        data_type = st.radio("데이터 양식", ["📍 유형 A (좌표 방식)", "📊 유형 B (MMC공차 기입 방식)"], horizontal=True)
         col1, col2, col3 = st.columns(3)
         with col1:
             sc = st.number_input("샘플 수", min_value=1, value=4, key="sc_v")
@@ -19,7 +19,7 @@ def run_position_analysis():
         with col2:
             mmc_ref = st.number_input("MMC 기준치 (유형 A 전용)", value=0.060, format="%.3f", key="mmc_v")
         with col3:
-            view_mode = st.radio("그래프 범위", ["자동(권장)", "수동 조절"], horizontal=True, key="mode_v")
+            view_mode = st.radio("그래프 범위", ["자동", "수동"], horizontal=True, key="mode_v")
 
     raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=200)
     
@@ -31,13 +31,11 @@ def run_position_analysis():
             lines = [line.strip() for line in raw_input.split('\n') if line.strip()]
             results = []
 
-            # --- [유형 A: 좌표 계산 로직] ---
             if "유형 A" in data_type:
                 rows = []
                 for line in lines:
                     nums = [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', line)]
                     if nums: rows.append(nums)
-                
                 for i in range(0, len(rows) // 3 * 3, 3):
                     dia_vals, x_vals, y_vals = rows[i], rows[i+1], rows[i+2]
                     for s in range(1, len(x_vals)):
@@ -46,11 +44,8 @@ def run_position_analysis():
                             "측정포인트": f"P{(i//3)+1}_S{s}",
                             "위치도": round(np.sqrt((x_vals[s]-x_vals[0])**2 + (y_vals[s]-y_vals[0])**2) * 2, 4),
                             "최종공차": round(tol + bonus, 4),
-                            "편차_X": x_vals[s]-x_vals[0], 
-                            "편차_Y": y_vals[s]-y_vals[0]  # 변수명 통일 완료
+                            "편차_X": x_vals[s]-x_vals[0], "편차_Y": y_vals[s]-y_vals[0]
                         })
-
-            # --- [유형 B: MMC공차 기입 방식] ---
             else:
                 v_rows = []
                 for line in lines:
@@ -61,24 +56,23 @@ def run_position_analysis():
                 for i in range(0, len(v_rows) // 3 * 3, 3):
                     pos_vals, mmc_vals = v_rows[i][-sc:], v_rows[i+1][-sc:]
                     for s in range(sc):
-                        # 가상 좌표 생성 로직 (이전처럼 사방으로 분산)
+                        # [시각화 개선] 위치도 값을 반경으로 삼아 사방으로 랜덤 분산
+                        radius = pos_vals[s] / 2
+                        angle = np.random.uniform(0, 2 * np.pi) # 랜덤 각도
                         results.append({
                             "측정포인트": f"P{(i//3)+1}_S{s+1}",
                             "위치도": pos_vals[s],
                             "최종공차": round(tol + mmc_vals[s], 4),
-                            "편차_X": (pos_vals[s]/4) * (1 if s < sc/2 else -1), 
-                            "편차_Y": (pos_vals[s]/4) * (1 if s%2==0 else -1)
+                            "편차_X": radius * np.cos(angle), 
+                            "편차_Y": radius * np.sin(angle)
                         })
 
             if results:
                 df = pd.DataFrame(results)
                 df['판정'] = np.where(df['위치도'] <= df['최종공차'], "✅ OK", "❌ NG")
-
                 max_total_tol = df['최종공차'].max()
-                if view_mode == "자동(권장)":
-                    view_limit = round((max_total_tol / 2) * 1.2, 2)
-                else:
-                    view_limit = st.slider("🔍 줌 조절 (±mm)", 0.05, 5.0, 0.5, step=0.05)
+                
+                view_limit = round((max_total_tol / 2) * 1.5, 2) if view_mode == "자동" else st.slider("🔍 줌", 0.05, 5.0, 0.5, step=0.05)
 
                 fig = go.Figure()
                 fig.add_shape(type="circle", x0=-tol/2, y0=-tol/2, x1=tol/2, y1=tol/2, line=dict(color="RoyalBlue", width=2.5), fillcolor="rgba(65, 105, 225, 0.05)")
@@ -96,7 +90,7 @@ def run_position_analysis():
                 st.dataframe(df[['측정포인트', '위치도', '최종공차', '판정']])
 
         except Exception as e:
-            st.error(f"⚠️ 오류 발생: {e}")
+            st.error(f"⚠️ 오류: {e}")
             st.session_state.analyzed = False
 
 if __name__ == "__main__":
