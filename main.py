@@ -47,51 +47,60 @@ set_korean_font()
 def set_style():
     st.markdown("""
         <style>
-        /* ───────── 사이드바 ───────── */
+        /* ───────── 사이드바 배경 ───────── */
         [data-testid="stSidebar"] {
             background-color: #0f172a !important;
         }
 
-        [data-testid="stSidebar"] * {
+        /* ───────── 사이드바 전체 텍스트 강제 흰색 ───────── */
+        [data-testid="stSidebar"],
+        [data-testid="stSidebar"] * ,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] div {
             color: #f8fafc !important;
         }
 
-        /* ───────── 본문 텍스트 ───────── */
+        /* 🔥 라디오 버튼 텍스트 */
+        [data-testid="stSidebar"] .stRadio label {
+            color: #f8fafc !important;
+            font-weight: 500;
+        }
+
+        /* 🔥 숫자 입력 라벨 */
+        [data-testid="stSidebar"] .stNumberInput label {
+            color: #f8fafc !important;
+        }
+
+        /* 🔥 caption (설명글) */
+        [data-testid="stSidebar"] .stCaption {
+            color: #cbd5f5 !important;
+        }
+
+        /* ───────── 본문 (흰 배경 영역) ───────── */
         div:not([data-testid="stSidebar"]) label {
             color: #111 !important;
             font-weight: 600;
         }
 
         div:not([data-testid="stSidebar"]) p,
-        div:not([data-testid="stSidebar"]) span,
-        div:not([data-testid="stSidebar"]) li {
+        div:not([data-testid="stSidebar"]) span {
             color: #222 !important;
         }
 
-        /* 🔥 caption (설명글) */
         div:not([data-testid="stSidebar"]) .stCaption {
             color: #444 !important;
-            font-size: 0.9rem;
         }
 
-        /* 🔥 markdown 블록 (코드 설명 포함) */
-        div:not([data-testid="stSidebar"]) .stMarkdown {
-            color: #222 !important;
-        }
-
-        /* ───────── 입력창 ───────── */
+        /* 입력창 */
         div:not([data-testid="stSidebar"]) input,
         div:not([data-testid="stSidebar"]) textarea {
             color: #111 !important;
             background-color: #ffffff !important;
         }
 
-        .stNumberInput input {
-            color: #111 !important;
-            background-color: #ffffff !important;
-        }
-
-        /* ───────── 버튼 ───────── */
+        /* 버튼 */
         .stButton > button {
             background-color: #ef4444 !important;
             color: white !important;
@@ -101,7 +110,7 @@ def set_style():
             height: 3em;
         }
 
-        /* ───────── NG 박스 ───────── */
+        /* 기타 UI */
         .ng-box {
             height: 200px;
             overflow-y: auto;
@@ -111,7 +120,6 @@ def set_style():
             background-color: #fff5f5;
         }
 
-        /* ───────── OK 박스 ───────── */
         .ok-box {
             padding: 12px;
             border-radius: 8px;
@@ -122,7 +130,6 @@ def set_style():
             font-size: 1.1em;
         }
 
-        /* ───────── 리포트 카드 ───────── */
         .report-card {
             background-color: #f1f5f9;
             padding: 20px;
