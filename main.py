@@ -83,6 +83,12 @@ def set_style():
             color: #111 !important;
             background-color: #ffffff !important;
         }
+	/* 🔥 코드블럭 (A유형 설명 박스 해결) */
+        .stCodeBlock, pre, code {
+            background-color: #f3f4f6 !important;
+            color: #111 !important;
+            border-radius: 8px;
+        }
 
         /* ───────── 본문 영역 ───────── */
         .main label {
