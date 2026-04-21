@@ -31,53 +31,55 @@ def clean_float(value):
 # ==========================================
 def parse_dukin_engine(lines, sample_count):
     processed = []
-    # 1. 텍스트 라인을 데이터 리스트로 정밀 변환
-    data_grid = []
+    full_text = ""
+    
+    # 1. 모든 줄을 하나의 텍스트 흐름으로 결합 (줄바꿈 이슈 해결)
     for line in lines:
         if isinstance(line, list):
-            row = [str(x).strip() for x in line if str(x).strip()]
+            full_text += " ".join([str(x) for x in line]) + "\n"
         else:
-            row = re.split(r'\t|\s{2,}', str(line).strip())
-            row = [x for x in row if x]
-        if row: data_grid.append(row)
+            full_text += str(line) + "\n"
 
-    # 2. 3행 유효성 검사 및 추출
-    i = 0
-    while i < len(data_grid) - 2:
-        row1, row2, row3 = data_grid[i], data_grid[i+1], data_grid[i+2]
+    # 2. 정규식을 사용하여 항목(A, B, C...) 단위로 쪼개기
+    # 패턴: 영문대문자 한 글자 뒤에 숫자/기호들이 나열되는 구조 추적
+    items = re.split(r'\n([A-Z])\s', full_text) 
+    
+    # split 결과는 [공백, 'A', '내용', 'B', '내용'...] 형태가 됨
+    for i in range(1, len(items), 2):
+        name = items[i].strip()
+        content = items[i+1]
         
-        # 첫 번째 행에 영문자(항목명)가 있는지 확인
-        item_match = next((x for x in row1 if x.isalpha() and len(x) == 1), None)
+        # 숫자들만 싹 긁어오기 (소수점, 마이너스 포함)
+        nums = re.findall(r'[-+]?\d*\.\d+|\d+', content)
+        nums = [float(n) for n in nums]
         
-        if item_match:
-            def extract_numbers(row):
-                # 숫자, 소수점, 마이너스 기호만 추출
-                nums = []
-                for val in row:
-                    found = re.findall(r'[-+]?\d*\.\d+|\d+', val)
-                    nums.extend([float(f) for f in found])
-                return nums
-
-            nums_p = extract_numbers(row1) # 지름/MMC용
-            nums_x = extract_numbers(row2) # X 좌표
-            nums_y = extract_numbers(row3) # Y 좌표
-
-            # 최소 도면치수 1개 + 측정치 1개는 있어야 계산 가능
-            if len(nums_x) >= 2 and len(nums_y) >= 2:
+        # 덕인 성적서 특성상:
+        # 첫 번째 줄 숫자들: 보통 지름(P) 관련
+        # 두 번째 줄 숫자들: X 좌표 관련
+        # 세 번째 줄 숫자들: Y 좌표 관련
+        # 실제 데이터 구조에 따라 인덱스를 유동적으로 매칭
+        
+        try:
+            # 최소한 도면치수(X, Y)와 측정치들이 확보되었는지 확인
+            # 보통 한 항목당 숫자 뭉치가 (1+샘플수)*3개 정도 있어야 함
+            if len(nums) >= (1 + sample_count) * 2:
+                # X 데이터 시작점과 Y 데이터 시작점 찾기 (성적서 레이아웃에 맞춰 조정)
+                # 데이터가 [P0, P1, P2, P3, P4, X0, X1, X2, X3, X4, Y0, Y1, Y2, Y3, Y4] 순서일 때:
+                step = 1 + sample_count
+                x_start = step if len(nums) > step * 2 else step # P열이 있을 경우와 없을 경우 대비
+                y_start = x_start + step
+                
                 for s in range(sample_count):
-                    try:
-                        processed.append({
-                            "측정포인트": f"{item_match}_S{s+1}",
-                            "도면치수_X": nums_x[0],
-                            "도면치수_Y": nums_y[0],
-                            "측정치_X": nums_x[s+1] if len(nums_x) > s+1 else nums_x[-1],
-                            "측정치_Y": nums_y[s+1] if len(nums_y) > s+1 else nums_y[-1],
-                            "실측지름_MMC용": nums_p[s+1] if len(nums_p) > s+1 else nums_p[-1]
-                        })
-                    except Exception: continue
-            i += 3 # 성공 시 3행 건너뜀
-        else:
-            i += 1 # 실패 시 한 행씩 내려가며 탐색
+                    processed.append({
+                        "측정포인트": f"{name}_S{s+1}",
+                        "도면치수_X": nums[x_start],
+                        "도면치수_Y": nums[y_start],
+                        "측정치_X": nums[x_start + 1 + s],
+                        "측정치_Y": nums[y_start + 1 + s],
+                        "실측지름_MMC용": nums[s+1] if x_start > 0 else 0.0
+                    })
+        except Exception as e:
+            continue
             
     return processed
 # ==========================================
