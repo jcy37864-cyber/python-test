@@ -102,25 +102,31 @@ def main():
                 st.session_state.analysed_data = df
                 st.dataframe(df.style.apply(lambda x: ["background-color: #ffbaba" if "NG" in str(v) else "" for v in x], axis=1), use_container_width=True)
 
-            if 'analysed_data' in st.session_state:
+       if 'analysed_data' in st.session_state:
                 st.subheader("🎯 위치도 산포도 (Target Map)")
                 ad = st.session_state.analysed_data
-                base_r = base_tol / 2  # 기본 공차 반지름
+                base_r = base_tol / 2  # 반지름
                 
                 fig = go.Figure()
 
-                # --- 1. 과녁 배경 (원형 허용 구역 채우기) ---
-                # 이 부분이 빠지면 과녁이 보이지 않습니다.
+                # 1. 중앙 십자선 (검은색)
+                fig.update_layout(
+                    xaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor='black'),
+                    yaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor='black')
+                )
+
+                # 2. 과녁 원 (이게 안 보이면 반지름이 너무 작은 것임)
+                # 원이 너무 작아서 안 보일 수 있으니 테두리를 아주 두껍게 설정
                 fig.add_shape(
                     type="circle",
                     xref="x", yref="y",
                     x0=-base_r, y0=-base_r, x1=base_r, y1=base_r,
-                    fillcolor="rgba(52, 152, 219, 0.3)", # 더 선명한 파란색 채우기
-                    line=dict(color="RoyalBlue", width=3), # 테두리 강조
-                    layer="below" # 점보다 아래에 그려지게 설정
+                    fillcolor="rgba(52, 152, 219, 0.4)", # 내부 색상
+                    line=dict(color="RoyalBlue", width=4), # 테두리 두껍게!
+                    layer="above" # 점보다 위에 그려서 확실히 보이게 함
                 )
 
-                # --- 2. 데이터 포인트 (OK/NG 분리) ---
+                # 3. 데이터 포인트
                 for p_label, p_color, p_status in [("✅ OK", "#2ecc71", "✅ OK"), ("❌ NG", "#e74c3c", "❌ NG")]:
                     subset = ad[ad['판정'] == p_status]
                     if not subset.empty:
@@ -130,25 +136,25 @@ def main():
                             mode='markers',
                             name=p_label,
                             marker=dict(color=p_color, size=12, line=dict(color='white', width=1)),
-                            text=subset['항목'],
-                            hovertemplate="<b>%{text}</b><br>X편차: %{x:.4f}<br>Y편차: %{y:.4f}<extra></extra>"
+                            text=subset['항목']
                         ))
 
-                # --- 3. 축 및 레이아웃 설정 (과녁이 잘 보이게 범위 조정) ---
+                # 4. 축 범위 강제 조정 (데이터가 너무 멀면 과녁이 안 보임)
+                # 만약 점들이 100씩 떨어져 있다면, 과녁(0.35)을 보기 위해 범위를 제한해야 함
                 dev_x = ad['실측_X'] - ad['도면_X']
                 dev_y = ad['실측_Y'] - ad['도면_Y']
-                # 데이터가 너무 멀리 있으면 과녁이 작게 보이므로 범위를 적절히 제한
-                max_dev = max(dev_x.abs().max(), dev_y.abs().max(), base_r * 2)
-                lim = max_dev * 1.2
-
+                
+                # 데이터가 있더라도 최소한 공차의 5배 정도는 보이게 설정
+                view_range = max(base_r * 5, 0.5) 
+                
                 fig.update_layout(
-                    xaxis=dict(range=[-lim, lim], zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#eee', title="X 편차"),
-                    yaxis=dict(range=[-lim, lim], zeroline=True, zerolinewidth=2, zerolinecolor='black', gridcolor='#eee', title="Y 편차"),
+                    # 주석: 아래 범위를 주석 처리하면 점들이 다 보이지만 과녁은 작아집니다.
+                    # 일단 과녁 확인을 위해 범위를 좁게 잡아보겠습니다.
+                    xaxis=dict(range=[-view_range, view_range], gridcolor='#eee'),
+                    yaxis=dict(range=[-view_range, view_range], gridcolor='#eee'),
                     width=800, height=800,
                     plot_bgcolor='white',
-                    showlegend=True,
-                    title_text=f"🎯 위치도 분석 과녁 (공차 범위: Ø{base_tol})",
-                    title_x=0.5
+                    title_text=f"🎯 과녁 중심부 확대 (공차: Ø{base_tol})"
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
