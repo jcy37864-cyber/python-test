@@ -59,86 +59,93 @@ def clean_float(value):
 def run_data_converter():
     st.header("🔄 성적서 데이터 자동 변환기")
     
-    # 1. 캐비티 수 선택 (유저가 직접 지정하여 오류 방지)
-    col1, col2 = st.columns([1, 2])
-    with col1:
+    # 1. 입력 방식 선택 및 캐비티 설정
+    col_opt1, col_opt2 = st.columns([1, 2])
+    with col_opt1:
+        input_method = st.radio("입력 방식 선택", ["텍스트 붙여넣기", "엑셀/CSV 업로드"])
         sample_count = st.number_input("🔢 샘플(캐비티) 수", min_value=1, max_value=20, value=4)
-    with col2:
+    with col_opt2:
         st.info(f"💡 현재 **{sample_count}개**의 샘플을 추출하도록 설정되었습니다.")
 
-    # 2. 데이터 입력창
-    raw_data = st.text_area(
-        "성적서 데이터를 붙여넣으세요", 
-        height=300, 
-        placeholder="Nominal 열부터 끝까지 복사해서 붙여넣으세요."
-    )
+    processed_results = []
 
-    if st.button("🚀 분석 데이터로 변환"):
-        if raw_data:
-            try:
+    # --- 방식 1: 텍스트 붙여넣기 (기존 로직) ---
+    if input_method == "텍스트 붙여넣기":
+        raw_data = st.text_area("성적서 데이터를 붙여넣으세요", height=300, placeholder="Nominal 열부터 끝까지 복사해서 붙여넣으세요.")
+        if st.button("🚀 텍스트 데이터 변환"):
+            if raw_data:
                 lines = [line.split('\t') for line in raw_data.strip().split('\n')]
                 if len(lines[0]) <= 1:
                     lines = [re.split(r'\s{2,}', line.strip()) for line in raw_data.strip().split('\n')]
-
-                processed_results = []
                 
                 for i in range(0, len(lines), 4):
-                    if i + 3 >= len(lines): break 
-                    
+                    if i + 3 >= len(lines): break
                     try:
-                        pin_line = lines[i]
-                        x_line = lines[i+2]
-                        y_line = lines[i+3]
-                        
-                        # 도면치수(Nominal)는 항상 줄의 맨 앞 숫자
-                        # 공차 숫자가 섞이지 않도록 리스트의 첫 번째 숫자만 추출
-                        all_nums_x = [clean_float(v) for v in x_line if re.search(r'\d', str(v))]
-                        nom_x = all_nums_x[0] if all_nums_x else 0.0
-                        
-                        all_nums_y = [clean_float(v) for v in y_line if re.search(r'\d', str(v))]
-                        nom_y = all_nums_y[0] if all_nums_y else 0.0
+                        pin_line, x_line, y_line = lines[i], lines[i+2], lines[i+3]
+                        nom_x = clean_float(next((v for v in x_line if re.search(r'\d', str(v))), 0))
+                        nom_y = clean_float(next((v for v in y_line if re.search(r'\d', str(v))), 0))
 
-                        # [핵심] 사용자가 설정한 개수만큼만 '뒤에서부터' 가져오기
-                        # 이렇게 하면 앞쪽에 공차(-100, 100 등)가 있어도 무시하고 진짜 데이터만 가져옵니다.
                         for s in range(sample_count):
-                            idx = -(sample_count - s) 
-                            
-                            act_x = clean_float(x_line[idx])
-                            act_y = clean_float(y_line[idx])
-                            # MMC 지름 라인(i+1)도 동일하게 뒤에서 추출
-                            act_dia = clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
-                            
-                            pin_name = next((str(x) for x in pin_line if "PIN" in str(x)), f"POINT_{i//4 + 1}")
-
+                            idx = -(sample_count - s)
                             processed_results.append({
-                                "측정포인트": f"{pin_name}_S{s+1}",
-                                "기본공차": 0.35,
-                                "도면치수_X": nom_x,
-                                "도면치수_Y": nom_y,
-                                "측정치_X": act_x,
-                                "측정치_Y": act_y,
-                                "실측지름_MMC용": act_dia
+                                "측정포인트": f"{pin_line[0]}_S{s+1}",
+                                "기본공차": 0.35, "도면치수_X": nom_x, "도면치수_Y": nom_y,
+                                "측정치_X": clean_float(x_line[idx]), "측정치_Y": clean_float(y_line[idx]),
+                                "실측지름_MMC용": clean_float(lines[i+1][idx]) if len(lines[i+1]) >= abs(idx) else 0.35
                             })
-                    except Exception:
-                        continue
+                    except: continue
 
-                # 3. 결과 출력
-                if processed_results:
-                    df_result = pd.DataFrame(processed_results)
-                    df_result.index = df_result.index + 1 # 1번부터 표시
-                    
-                    st.success(f"✅ 변환 완료! (포인트당 {sample_count}개씩 총 {len(processed_results)}개)")
-                    st.dataframe(df_result, use_container_width=True)
-                    
-                    st.session_state.data = df_result
-                    st.balloons()
-                    st.info("🎯 상단의 **'📊 Step 2. 위치도 결과 분석'** 탭으로 이동하세요.")
-                else:
-                    st.error("데이터를 분석할 수 없습니다.")
-
-            except Exception as e:
-                st.error(f"오류 발생: {e}")
+    # --- 방식 2: 엑셀/CSV 업로드 (오늘 추가된 덕인 좌표형 로직) ---
+    else:
+        up_file = st.file_uploader("덕인 좌표형 CSV 파일을 업로드하세요", type=['csv'])
+        if up_file:
+            df_csv = pd.read_csv(up_file, header=None)
+            st.write("📂 파일 로드 완료")
+            if st.button("🚀 파일 데이터 변환"):
+                # 3행 1세트 로직 가동
+                for i in range(0, len(df_csv), 3):
+                    try:
+                        item_name = str(df_csv.iloc[i, 0]).strip()
+                        if item_name == 'nan' or item_name == "": continue
                         
+                        for s in range(sample_count):
+                            # 첫 번째 열 이후부터 시료 데이터가 있다고 가정 (1번 열부터 sample_count만큼)
+                            col_idx = s + 1 
+                            processed_results.append({
+                                "측정포인트": f"{item_name}_S{s+1}",
+                                "기본공차": 0.35,
+                                "도면치수_X": 0.0, # 필요시 엑셀 내 도면치수 행을 찾아 연결 가능
+                                "도면치수_Y": 0.0,
+                                "측정치_X": clean_float(df_csv.iloc[i+1, col_idx]),
+                                "측정치_Y": clean_float(df_csv.iloc[i+2, col_idx]),
+                                "실측지름_MMC용": clean_float(df_csv.iloc[i, col_idx])
+                            })
+                    except: continue
+
+    # [공통 결과 출력 부분] - 함수의 가장 아래쪽에 위치하게 합니다.
+    if processed_results:
+        # 리스트를 표(DataFrame)로 변환
+        df_result = pd.DataFrame(processed_results)
+        
+        # 사용자가 보기 편하게 순번(Index)을 1번부터 표시
+        df_result.index = df_result.index + 1 
+        
+        st.success(f"✅ 변환 완료! (총 {len(processed_results)}개의 데이터가 준비되었습니다.)")
+        
+        # 1. 화면에 표 출력
+        st.dataframe(df_result, use_container_width=True)
+        
+        # 2. [중요] 세션 스테이트에 데이터 저장 (그래프 분석 탭에서 사용하기 위함)
+        st.session_state.data = df_result
+        
+        # 3. 성공 알림 (풍선 효과)
+        st.balloons()
+        st.info("🎯 변환된 데이터를 확인하신 후, 상단의 **'📊 Step 2. 위치도 결과 분석'** 탭으로 이동하세요.")
+    
+    elif 'raw_data' in locals() and raw_data or 'up_file' in locals() and up_file:
+        # 데이터는 입력했는데 결과가 비어있는 경우
+        st.error("데이터를 분석할 수 없습니다. 양식이나 샘플(캐비티) 수를 다시 확인해주세요.")
+        
                # 3. 결과 출력
                 if processed_results:
                     df_result = pd.DataFrame(processed_results)
