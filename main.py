@@ -1,71 +1,102 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import re
-from io import BytesIO
 
 # ==========================================
-# 1. 전역 스타일 및 초기화
+# 1. 초기 설정 및 스타일
 # ==========================================
-st.set_page_config(page_title="Quality Hub Hybrid v10.0", layout="wide")
+st.set_page_config(page_title="Quality Analysis Hybrid v2.0", layout="wide")
 
 def set_style():
     st.markdown("""
         <style>
-        .main { background-color: #f8fafc; }
-        .stButton > button { width: 100%; border-radius: 8px; font-weight: bold; }
-        .ng-box { height: 180px; overflow-y: auto; border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: #fff5f5; }
+        .stButton > button { width: 100%; border-radius: 8px; font-weight: bold; height: 3em; }
+        .ng-box { height: 180px; overflow-y: auto; border: 1px solid #ff4b4b; padding: 12px; border-radius: 5px; background-color: #fff5f5; }
         </style>
     """, unsafe_allow_html=True)
 
-# ==========================================
-# 2. 유형별 핵심 로직 (A: 정밀파싱, B: 기존호환)
-# ==========================================
-
 def run_integrated_analysis():
-    st.title("🎯 위치도 정밀 분석 (Hybrid A/B)")
-    
-    # [사이드바] 유형 선택 스위치
+    set_style()
+    st.title("🎯 위치도 정밀 분석 시스템 (Hybrid)")
+
+    # -------------------------------------------
+    # [사이드바] 설정 영역
+    # -------------------------------------------
     with st.sidebar:
-        st.header("🛠️ 시스템 설정")
-        mode = st.radio("데이터 유형 선택", ["유형 B (기존/십자형)", "유형 A (3줄세트/오류보정)"])
+        st.header("⚙️ 시스템 설정")
+        mode = st.radio("데이터 성적서 유형", ["유형 B (가로 데이터)", "유형 A (3줄 세트)"])
         st.divider()
-        if mode == "유형 B (기존/십자형)":
-            sc = st.number_input("샘플(캐비티) 수", 1, 20, 4)
-            tol_default = 0.350
-        else:
-            sc = st.number_input("데이터 세트 크기", 1, 20, 4)
-            tol_default = 0.350
+        sc = st.number_input("샘플(캐비티) 수", min_value=1, value=4)
+        tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f")
+        
+        if mode == "유형 A (3줄 세트)":
             mmc_ref = st.number_input("MMC 기준치", value=0.060, format="%.3f")
+        
+        view_mode = st.radio("그래프 범위", ["자동(권장)", "수동 조절"], horizontal=True)
+        if view_mode == "수동 조절":
+            view_limit = st.slider("줌 조절 (±mm)", 0.1, 5.0, 0.5, step=0.1)
 
-    # 분석 설정
-    col1, col2 = st.columns(2)
-    with col1:
-        tol = st.number_input("기본 공차(Ø)", value=tol_default, format="%.3f")
-    with col2:
-        view_mode = st.radio("그래프 범위", ["자동", "수동"], horizontal=True)
+    # -------------------------------------------
+    # [메인] 데이터 입력
+    # -------------------------------------------
+    raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=250, placeholder="이미지 표의 텍스트를 복사하여 입력")
+    analyze_button = st.button("📊 데이터 분석 시작", type="primary")
 
-    raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=250)
-    
-    if st.button("🚀 데이터 분석 및 그래프 생성", type="primary"):
+    if analyze_button:
         if not raw_input:
-            st.warning("데이터를 입력해 주세요.")
+            st.warning("⚠️ 입력된 데이터가 없습니다.")
             return
 
         try:
             results = []
+            
             # -------------------------------------------
-            # 유형 A 로직: 3줄 세트 정밀 파싱 (200 초과 방지)
+            # 유형 B 로직 (참조 코드의 황금 인덱스 복구)
             # -------------------------------------------
-            if mode == "유형 A (3줄세트/오류보정)":
+            if mode == "유형 B (가로 데이터)":
+                # 공백 또는 탭으로 분리하여 리스트화
+                lines = [re.split(r'\s+', l.strip()) for l in raw_input.strip().split('\n') if l.strip()]
+                
+                for i in range(0, len(lines), 4):
+                    if i+3 >= len(lines): break
+                    
+                    # 도면값(Nominal)은 무조건 각 데이터 줄의 첫 번째 숫자 (index 0)
+                    try:
+                        nom_x = float(re.sub(r'[^0-9\.\-]', '', lines[i+2][0]))
+                        nom_y = float(re.sub(r'[^0-9\.\-]', '', lines[i+3][0]))
+                        
+                        pin_label = lines[i][0] if "PIN" in str(lines[i]) else f"P{i//4 + 1}"
+                        
+                        for s in range(sc):
+                            # [핵심] 이전에 잘 나오던 '뒤에서부터 샘플 가져오기' 인덱스 방식
+                            idx = -(sc - s)
+                            
+                            act_x = float(re.sub(r'[^0-9\.\-]', '', lines[i+2][idx]))
+                            act_y = float(re.sub(r'[^0-9\.\-]', '', lines[i+3][idx]))
+                            # MMC 값도 같은 위치에서 추출
+                            dia_val = float(re.sub(r'[^0-9\.\-]', '', lines[i+1][idx])) if len(lines[i+1]) > abs(idx) else 0.35
+                            
+                            results.append({
+                                "측정포인트": f"{pin_label}_S{s+1}",
+                                "도면_X": nom_x, "도면_Y": nom_y,
+                                "측정_X": act_x, "측정_Y": act_y,
+                                "지름_MMC": dia_val
+                            })
+                    except (IndexError, ValueError):
+                        continue
+
+            # -------------------------------------------
+            # 유형 A 로직 (3줄 세트 정밀 파싱)
+            # -------------------------------------------
+            else:
                 lines = [line.strip() for line in raw_input.split('\n') if line.strip()]
                 rows = []
                 for line in lines:
                     nums = [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', line)]
-                    # 유형 A의 고질적 문제인 '200' 근처의 값 보정 (필요시)
-                    nums = [n if abs(n) < 150 else n % 100 for n in nums] 
+                    # 좌표 튐 현상 보정 (150 이상 수치는 나머지 연산)
+                    nums = [n if abs(n) < 150 else n % 100 for n in nums]
                     if nums: rows.append(nums)
 
                 for i in range(0, len(rows) // 3 * 3, 3):
@@ -73,87 +104,18 @@ def run_integrated_analysis():
                     label = f"P{(i//3)+1}"
                     for s in range(1, len(x_vals)):
                         results.append({
-                            "POINT": f"{label}_S{s}",
-                            "NOM_X": x_vals[0], "NOM_Y": y_vals[0],
-                            "ACT_X": x_vals[s], "ACT_Y": y_vals[s],
-                            "DIA_MMC": dia_vals[s-1] if (s-1) < len(dia_vals) else dia_vals[-1]
+                            "측정포인트": f"{label}_S{s}",
+                            "도면_X": x_vals[0], "도면_Y": y_vals[0],
+                            "측정_X": x_vals[s], "측정_Y": y_vals[s],
+                            "지름_MMC": dia_vals[s-1] if (s-1) < len(dia_vals) else dia_vals[-1]
                         })
 
-            # -------------------------------------------
-            # 유형 B 로직: 기존의 넓은 데이터 시트 파싱
-            # -------------------------------------------
-            else:
-                lines = [re.split(r'\s+', l.strip()) for l in raw_input.strip().split('\n') if l.strip()]
-                for i in range(0, len(lines), 4):
-                    if i+3 >= len(lines): break
-                    pin_name = lines[i][0] if "PIN" in str(lines[i]) else f"P{i//4 + 1}"
-                    # 유형 B는 첫 번째 숫자가 도면치수(Nominal)
-                    nom_x = float(re.sub(r'[^0-9\.\-]', '', lines[i+2][0]))
-                    nom_y = float(re.sub(r'[^0-9\.\-]', '', lines[i+3][0]))
-                    for s in range(sc):
-                        idx = -(sc - s)
-                        results.append({
-                            "POINT": f"{pin_name}_S{s+1}",
-                            "NOM_X": nom_x, "NOM_Y": nom_y,
-                            "ACT_X": float(re.sub(r'[^0-9\.\-]', '', lines[i+2][idx])),
-                            "ACT_Y": float(re.sub(r'[^0-9\.\-]', '', lines[i+3][idx])),
-                            "DIA_MMC": float(re.sub(r'[^0-9\.\-]', '', lines[i+1][idx])) if len(lines[i+1]) > abs(idx) else 0.35
-                        })
-
-            # 공통 계산 로직
+            # 데이터프레임 생성 및 계산
             df = pd.DataFrame(results)
-            df['DEV_X'] = (df['ACT_X'] - df['NOM_X']).round(4)
-            df['DEV_Y'] = (df['ACT_Y'] - df['NOM_Y']).round(4)
-            df['POSITION'] = (np.sqrt(df['DEV_X']**2 + df['DEV_Y']**2) * 2).round(4)
+            df['편차_X'] = (df['측정_X'] - df['도면_X']).round(4)
+            df['편차_Y'] = (df['측정_Y'] - df['도면_Y']).round(4)
+            df['위치도'] = (np.sqrt(df['편차_X']**2 + df['편차_Y']**2) * 2).round(4)
             
-            # 유형별 보너스 공차 적용 차이
-            if mode == "유형 A (3줄세트/오류보정)":
-                df['BONUS'] = (df['DIA_MMC'] - mmc_ref).clip(lower=0).round(4)
-            else:
-                df['BONUS'] = (df['DIA_MMC'] - 0.35).clip(lower=0).round(4) # B유형 기본값
-            
-            df['LIMIT'] = (tol + df['BONUS']).round(4)
-            df['RESULT'] = np.where(df['POSITION'] <= df['LIMIT'], "✅ OK", "❌ NG")
-
-            # 그래프 그리기 (Plotly 사용 - 데옥인님이 원하던 그 모양)
-            fig = go.Figure()
-            max_limit = df['LIMIT'].max()
-            r_blue, r_red = tol / 2, max_limit / 2
-            
-            # 공차 영역 시각화
-            fig.add_shape(type="circle", x0=-r_blue, y0=-r_blue, x1=r_blue, y1=r_blue, line=dict(color="RoyalBlue", width=2), fillcolor="rgba(65, 105, 225, 0.1)")
-            fig.add_shape(type="circle", x0=-r_red, y0=-r_red, x1=r_red, y1=r_red, line=dict(color="Red", width=1.5, dash="dot"))
-
-            # 점 찍기
-            for res, color in zip(["✅ OK", "❌ NG"], ["#2ecc71", "#e74c3c"]):
-                sub = df[df['RESULT'] == res]
-                if not sub.empty:
-                    fig.add_trace(go.Scatter(x=sub['DEV_X'], y=sub['DEV_Y'], mode='markers+text', name=res,
-                                             text=sub['POINT'], textposition="top center",
-                                             marker=dict(size=10, color=color, line=dict(width=1, color="white"))))
-
-            # 레이아웃 설정
-            v_lim = (max_limit / 2) * 1.5 if view_mode == "자동" else 0.5
-            fig.update_layout(width=700, height=700, template="plotly_white",
-                              xaxis=dict(range=[-v_lim, v_lim], zeroline=True, title="X Deviation"),
-                              yaxis=dict(range=[-v_lim, v_lim], zeroline=True, title="Y Deviation"))
-            
-            st.plotly_chart(fig, use_container_width=True)
-
-            # 결과표 및 NG 리스트
-            st.dataframe(df[['POINT', 'POSITION', 'BONUS', 'LIMIT', 'RESULT']], use_container_width=True)
-            
-            ng_df = df[df['RESULT'] == "❌ NG"]
-            if not ng_df.empty:
-                st.error("🚨 규격 이탈(NG) 상세 정보")
-                ng_html = "".join([f"<p>• <b>{r['POINT']}</b>: {r['POSITION']} (허용: {r['LIMIT']})</p>" for _, r in ng_df.iterrows()])
-                st.markdown(f"<div class='ng-box'>{ng_html}</div>", unsafe_allow_html=True)
-            else:
-                st.success("✅ 모든 포인트 합격!")
-
-        except Exception as e:
-            st.error(f"오류 발생: 데이터 형식을 확인해 주세요. ({e})")
-
-if __name__ == "__main__":
-    set_style()
-    run_integrated_analysis()
+            # 보너스 공차 계산
+            if mode == "유형 A (3줄 세트)":
+                df['보너스'] = (df['
