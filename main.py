@@ -446,7 +446,7 @@ def run_position_analysis():
         st.markdown("### 분석 설정")
         mode  = st.radio("성적서 유형",
                          ["유형 A (3줄: 포인트명/X/Y)",
-                          "유형 B (자동감지: 위치도/MMC/X?/Y)"])
+                          "유형 B (자동감지: 위치도/MMC/X/Y)"])
         sc    = st.number_input("시료 수 (Sample)", min_value=1, value=4)
         tol   = st.number_input("기본 공차 (Ø)", value=0.350, format="%.3f")
         m_ref = st.number_input("MMC 기준값 (지름)", value=0.350, format="%.3f")
