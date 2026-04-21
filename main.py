@@ -3,75 +3,62 @@ import pandas as pd
 import numpy as np
 import re
 
-# 1. 페이지 설정
-st.set_page_config(page_title="덕인 성적서 분석기", layout="wide")
+# 1. 앱 제목 및 기본 설정
+st.set_page_config(page_title="품질 분석기", layout="wide")
+st.title("🎯 덕인 위치도 분석 (서버 복구용)")
 
-# 2. 데이터 분석 함수
-def parse_dukin_final(text, sample_count):
-    # 숫자만 추출
-    nums = re.findall(r'[-+]?\d*\.\d+|\d+', text)
-    nums = [float(n) for n in nums]
-    
-    processed = []
-    line_len = 1 + sample_count 
-    set_len = line_len * 3 
-    
-    total_points = len(nums) // set_len
-    
-    for i in range(total_points):
-        base = i * set_len
-        label = chr(65 + i) if i < 26 else f"P{i+1}"
-        
-        try:
-            p_row = nums[base : base + line_len]
-            x_row = nums[base + line_len : base + (line_len * 2)]
-            y_row = nums[base + (line_len * 2) : base + (line_len * 3)]
-            
-            for s in range(sample_count):
-                processed.append({
-                    "항목": f"{label}_S{s+1}",
-                    "도면_X": x_row[0],
-                    "도면_Y": y_row[0],
-                    "실측_X": x_row[s+1],
-                    "실측_Y": y_row[s+1],
-                    "실측지름": p_row[s+1]
-                })
-        except:
-            continue
-    return processed
-
-# 3. UI 구성
-st.title("🎯 덕인 위치도 분석 시스템 (v20.0)")
-st.markdown("---")
-
-# 입력 섹션
+# 2. 사이드바 입력 설정 (계산 기준)
 with st.sidebar:
-    st.header("⚙️ 설정")
+    st.header("⚙️ 기준 설정")
     sc = st.number_input("샘플 수 (S1~S4면 4)", min_value=1, value=4)
-    mmc_ref = st.number_input("MMC 기준", value=0.350, format="%.3f")
-    tol_ref = st.number_input("기본 공차", value=0.350, format="%.3f")
+    mmc_ref = st.number_input("MMC 기준값", value=0.350, format="%.3f")
+    tol_ref = st.number_input("기본 공차값", value=0.350, format="%.3f")
 
-raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=300)
+# 3. 데이터 입력창
+raw_input = st.text_area("성적서 데이터를 전체 복사해서 붙여넣으세요", height=300)
 
-if st.button("🚀 데이터 분석 및 결과 확인"):
-    if raw_input:
-        res = parse_dukin_final(raw_input, sc)
-        if res:
-            df = pd.DataFrame(res)
-            # 계산 로직
-            df['위치도'] = (2 * np.sqrt((df['실측_X'] - df['도면_X'])**2 + (df['실측_Y'] - df['도면_Y'])**2)).round(4)
-            df['보너스'] = (df['실측지름'] - mmc_ref).clip(lower=0).round(4)
-            df['최종공차'] = (tol_ref + df['보너스']).round(4)
-            df['판정'] = np.where(df['위치도'] <= df['최종공차'], "OK", "NG")
-            
-            # 결과 표시
-            st.success(f"✅ 분석 완료: {len(res)}개 포인트")
-            st.dataframe(df.style.apply(lambda x: ["background-color: #ffcccc" if v == "NG" else "" for v in x], axis=1), use_container_width=True)
-            
-            # 다운로드 버튼
-            csv = df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 분석 결과 다운로드 (CSV)", csv, "result.csv", "text/csv")
-        else:
-            st.error("데이터를 분석할 수 없습니다. 형식을 확인해주세요.")
+# 4. 분석 실행
+if st.button("🚀 분석 시작"):
+    if not raw_input:
+        st.warning("데이터를 입력해 주세요.")
     else:
-        st.warning("데이터를 먼저 입력해주세요.")
+        try:
+            # 모든 숫자만 추출
+            nums = [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', raw_input)]
+            step = 1 + sc # 도면1 + 샘플n
+            
+            if len(nums) < step * 3:
+                st.error(f"데이터가 부족합니다. (현재 숫자 {len(nums)}개 발견)")
+            else:
+                data = []
+                # 3개 행(P, X, Y)을 한 세트로 묶어서 처리
+                for i in range(len(nums) // (step * 3)):
+                    base = i * (step * 3)
+                    p = nums[base : base + step]
+                    x = nums[base + step : base + step * 2]
+                    y = nums[base + step * 2 : base + step * 3]
+                    
+                    for s in range(sc):
+                        data.append({
+                            "ID": f"{chr(65+i)}_S{s+1}",
+                            "X_도면": x[0], "Y_도면": y[0],
+                            "X_실측": x[s+1], "Y_실측": y[s+1], "지름": p[s+1]
+                        })
+                
+                # 데이터프레임 생성 및 계산
+                df = pd.DataFrame(data)
+                # 위치도 = 2 * SQRT( (X실측-X도면)^2 + (Y실측-Y도면)^2 )
+                df['위치도'] = (2 * np.sqrt((df['X_실측']-df['X_도면'])**2 + (df['Y_실측']-df['Y_도면'])**2)).round(4)
+                df['보너스'] = (df['지름'] - mmc_ref).clip(lower=0).round(4)
+                df['최종공차'] = (tol_ref + df['보너스']).round(4)
+                df['판정'] = np.where(df['위치도'] <= df['최종공차'], "OK", "NG")
+                
+                st.success("✅ 분석 완료!")
+                st.dataframe(df, use_container_width=True)
+                
+                # CSV 다운로드 (가장 안전한 저장 방식)
+                csv = df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("📥 결과 다운로드 (CSV)", csv, "result.csv", "text/csv")
+                
+        except Exception as e:
+            st.error(f"오류 발생: {str(e)}")
