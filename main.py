@@ -6,14 +6,13 @@ import matplotlib.font_manager as fm
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="Quality Hub Pro v2.10", layout="wide")
+st.set_page_config(page_title="Quality Hub Pro v2.11", layout="wide")
 
 # ─────────────────────────────────────────────────
 # 한글 폰트 설정 (그래프 한글 깨짐 방지)
 # ─────────────────────────────────────────────────
 def set_korean_font():
     try:
-        # Noto Sans CJK KR 우선 사용
         font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
         font_prop = fm.FontProperties(fname=font_path)
         plt.rcParams['font.family'] = font_prop.get_name()
@@ -21,7 +20,20 @@ def set_korean_font():
         plt.rcParams['axes.unicode_minus'] = False
     except Exception:
         try:
-            plt.rcParams['font.family'] = 'Noto Sans CJK KR'
+            # 시스템에 설치된 폰트 중 한글 지원 폰트 탐색
+            system_fonts = fm.findSystemFonts()
+            korean_keywords = ['noto', 'cjk', 'gothic', 'gulim', 'batang', 'malgun']
+            found = None
+            for fp in system_fonts:
+                if any(k in fp.lower() for k in korean_keywords):
+                    found = fp
+                    break
+            if found:
+                fm.fontManager.addfont(found)
+                prop = fm.FontProperties(fname=found)
+                plt.rcParams['font.family'] = prop.get_name()
+            else:
+                plt.rcParams['font.family'] = 'Noto Sans CJK KR'
             plt.rcParams['axes.unicode_minus'] = False
         except Exception:
             pass
@@ -46,13 +58,20 @@ def set_style():
         </style>
     """, unsafe_allow_html=True)
 
+# ─────────────────────────────────────────────────
+# [BUG FIX 1] clean_float: 음수 부호 처리 개선
+# ─────────────────────────────────────────────────
 def clean_float(val):
     """숫자만 추출 → float. 실패시 None"""
     try:
         v = re.sub(r'[^0-9.\-]', '', str(val))
-        # 음수 부호가 맨 앞에 있는 경우만 허용
-        if v.count('-') > 1:
-            v = '-' + v.replace('-', '')
+        # 중복 마이너스 부호 정규화
+        v = re.sub(r'-+', '-', v)
+        # 맨 앞 부호만 유지, 나머지 마이너스 제거
+        if v.startswith('-'):
+            v = '-' + v[1:].replace('-', '')
+        else:
+            v = v.replace('-', '')
         return float(v) if v and v not in ('-', '.', '-.') else None
     except Exception:
         return None
@@ -63,7 +82,7 @@ def is_num(val):
 # ═══════════════════════════════════════════════════════
 # A유형 파서
 # ─────────────────────────────────────────────────────
-# 3줄 세트 구조 (이미지 1 확인):
+# 3줄 세트 구조:
 #   줄1: 포인트명(A,B,C..)  위치도_S1  위치도_S2  위치도_S3  위치도_S4
 #   줄2: Nominal_X          X_S1       X_S2       X_S3       X_S4
 #   줄3: Nominal_Y          Y_S1       Y_S2       Y_S3       Y_S4
@@ -77,7 +96,6 @@ def parse_type_a(raw_input, sc):
         l = l.strip()
         if not l:
             continue
-        # 탭 우선, 없으면 2칸 이상 공백
         if '\t' in l:
             parts = [p.strip() for p in l.split('\t') if p.strip()]
         else:
@@ -89,28 +107,22 @@ def parse_type_a(raw_input, sc):
     pt_num = 1
     while i <= len(lines) - 3:
         try:
-            pos_line = lines[i]    # 포인트명 + 위치도값
-            x_line   = lines[i+1] # Nominal_X + 샘플X
-            y_line   = lines[i+2] # Nominal_Y + 샘플Y
+            pos_line = lines[i]
+            x_line   = lines[i+1]
+            y_line   = lines[i+2]
 
-            # ── 포인트명 줄 검증: 첫 토큰이 문자(알파벳/한글) 포함해야 함
             first_tok = str(pos_line[0]) if pos_line else ''
             if not re.search(r'[A-Za-z가-힣]', first_tok):
                 i += 1
                 continue
 
-            # ── X/Y 줄 검증: 첫 토큰이 숫자여야 함
             if not is_num(x_line[0]) or not is_num(y_line[0]):
                 i += 1
                 continue
 
-            # 포인트명
             lbl = re.sub(r'[^A-Za-z0-9_가-힣]', '', first_tok) or f"P{pt_num}"
 
-            # 위치도값 (pos_line 숫자 부분)
             pos_nums = [clean_float(v) for v in pos_line[1:] if is_num(v)]
-
-            # X/Y Nominal + 실측값
             x_nums = [clean_float(v) for v in x_line if is_num(v)]
             y_nums = [clean_float(v) for v in y_line if is_num(v)]
 
@@ -123,7 +135,6 @@ def parse_type_a(raw_input, sc):
             ax_vals = x_nums[1:]
             ay_vals = y_nums[1:]
 
-            # 뒤에서 sc개 추출
             n = min(sc, len(ax_vals), len(ay_vals))
             if n == 0:
                 i += 3
@@ -134,7 +145,6 @@ def parse_type_a(raw_input, sc):
                 ax  = ax_vals[si]
                 ay  = ay_vals[si]
 
-                # 위치도: pos_nums 뒤에서 n개 중 s번째
                 if len(pos_nums) >= n:
                     pos_val = pos_nums[len(pos_nums) - n + s]
                 elif pos_nums:
@@ -163,10 +173,10 @@ def parse_type_a(raw_input, sc):
 # ═══════════════════════════════════════════════════════
 # B유형 파서
 # ─────────────────────────────────────────────────────
-# 3줄 세트 구조 (이미지 2 확인):
-#   줄1: Ø0.35ⓜ  0.00  0.35  Ref번호   위치도_S1  위치도_S2  위치도_S3  위치도_S4
-#   줄2: Max0.41  0           MMC공차   MMC_S1     MMC_S2     MMC_S3     MMC_S4
-#   줄3: Nominal  -100  100   Y         Y_S1       Y_S2       Y_S3       Y_S4
+# 3줄 세트 구조:
+#   줄1: Ø0.35ⓜ  0.00  0.35  Ref번호   위치도_S1  위치도_S2  ...
+#   줄2: Max0.41  0           MMC공차   MMC_S1     MMC_S2    ...
+#   줄3: Nominal  -100  100   Y         Y_S1       Y_S2      ...
 # ═══════════════════════════════════════════════════════
 def parse_type_b(raw_input, sc, tol, m_ref):
     results = []
@@ -188,33 +198,27 @@ def parse_type_b(raw_input, sc, tol, m_ref):
     pt_num = 1
     while i <= len(lines) - 3:
         try:
-            pos_line = lines[i]    # 위치도값 줄 (Ø0.35ⓜ 포함)
-            mmc_line = lines[i+1]  # MMC공차 줄
-            y_line   = lines[i+2]  # Y좌표 줄
+            pos_line = lines[i]
+            mmc_line = lines[i+1]
+            y_line   = lines[i+2]
 
-            # ── 줄1 검증: 'Ø' 또는 공차 관련 문자 포함하거나 첫 숫자가 0~1 범위
-            # ── 줄3 검증: Nominal(숫자)이 첫 토큰
             if not is_num(y_line[0]):
                 i += 1
                 continue
 
-            # Nominal Y
             nom_y = clean_float(y_line[0]) or 0.0
-            # Nominal X = 0 (B유형은 Y방향 1D 측정)
             nom_x = 0.0
 
-            # 포인트 Ref 번호 (pos_line에서 정수처럼 보이는 것)
             ref_candidates = [v for v in pos_line if re.fullmatch(r'\d+', str(v))]
             lbl = f"P{ref_candidates[0]}" if ref_candidates else f"P{pt_num}"
 
-            # 위치도값: pos_line 뒤에서 sc개 숫자
             pos_nums = [clean_float(v) for v in pos_line if is_num(v)]
-            # MMC 실측지름: mmc_line 뒤에서 sc개
-            mmc_nums = [clean_float(v) for v in mmc_line if is_num(v) and clean_float(v) != 0.0]
-            # Y 실측값: y_line 뒤에서 sc개
+
+            # [BUG FIX 2] 0값 제거 없이 전체 추출 → 인덱스 밀림 방지
+            mmc_nums = [clean_float(v) for v in mmc_line if is_num(v)]
+
             y_nums_all = [clean_float(v) for v in y_line if is_num(v)]
 
-            # 각 줄에서 뒤쪽 sc개 추출
             def tail(lst, n):
                 lst = [v for v in lst if v is not None]
                 if len(lst) >= n:
@@ -232,30 +236,31 @@ def parse_type_b(raw_input, sc, tol, m_ref):
 
             for s in range(n):
                 pos_v = pos_vals[s] if s < len(pos_vals) else None
-                mmc_v = mmc_vals[s] if s < len(mmc_vals) else m_ref
+
+                # [BUG FIX 2] 0이거나 None인 경우에만 m_ref로 대체
+                raw_mmc = mmc_vals[s] if s < len(mmc_vals) else None
+                mmc_v = raw_mmc if (raw_mmc is not None and raw_mmc > 0) else m_ref
+
                 ay    = y_vals[s]
 
-                # 편차: Y방향만 있으므로 DX=0, DY=ay-nom_y
                 dx = 0.0
                 dy = round(ay - nom_y, 4)
 
-                # 위치도: 성적서값 우선
                 if pos_v is not None:
                     pos_result = round(pos_v, 4)
                 else:
                     pos_result = round(abs(dy) * 2, 4)
 
-                # MMC 보너스공차
-                bonus = round(max(0.0, (mmc_v or m_ref) - m_ref), 4)
+                bonus = round(max(0.0, mmc_v - m_ref), 4)
                 limit = round(tol + bonus, 4)
 
                 results.append({
                     "ID":    f"{lbl}_S{s+1}",
                     "NX":    nom_x,
                     "NY":    nom_y,
-                    "AX":    nom_x,   # X는 없으므로 Nominal 그대로
+                    "AX":    nom_x,
                     "AY":    ay,
-                    "DIA":   mmc_v or m_ref,
+                    "DIA":   mmc_v,
                     "POS":   pos_result,
                     "BONUS": bonus,
                     "LIMIT": limit,
@@ -271,7 +276,7 @@ def parse_type_b(raw_input, sc, tol, m_ref):
     return results
 
 # ─────────────────────────────────────────────────
-# 기본툴과 동일한 matplotlib 산포도
+# 2D 산포도 (A유형용)
 # ─────────────────────────────────────────────────
 def draw_scatter_plot(df, tol):
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -279,7 +284,6 @@ def draw_scatter_plot(df, tol):
     dev_x = df['DX']
     dev_y = df['DY']
 
-    # 🔵 Basic Tolerance 원
     basic_r = tol / 2
     ax.add_patch(plt.Circle((0, 0), basic_r,
                              color='#3498db', fill=True, alpha=0.12, linestyle='--'))
@@ -287,19 +291,16 @@ def draw_scatter_plot(df, tol):
                              color='#3498db', fill=False, linestyle='--', linewidth=1.5,
                              label=f'Basic Tol (O{tol:.3f})'))
 
-    # 🔴 MMC 공차 원 (median)
     rep_limit = df['LIMIT'].median()
     mmc_r = rep_limit / 2
     ax.add_patch(plt.Circle((0, 0), mmc_r,
                              color='#e74c3c', fill=False, linewidth=2,
                              label=f'Median MMC Tol (O{rep_limit:.3f})'))
 
-    # 측정 포인트
     colors = df['RES'].apply(lambda x: '#2ecc71' if 'OK' in x else '#e74c3c')
     ax.scatter(dev_x, dev_y, c=colors, s=60, edgecolors='white', zorder=5,
                label='Measured Points')
 
-    # NG 라벨
     for _, row in df[df['RES'] == "❌ NG"].iterrows():
         ax.annotate(row['ID'], (row['DX'], row['DY']),
                     textcoords="offset points", xytext=(6, 6),
@@ -309,8 +310,6 @@ def draw_scatter_plot(df, tol):
     ax.axvline(0, color='black', linewidth=1.2)
     ax.set_xlabel("Deviation X", fontsize=12)
     ax.set_ylabel("Deviation Y", fontsize=12)
-
-    # 제목 한글 제거 → 영문만 사용 (깨짐 방지)
     ax.set_title(f"Position Error Distribution\nBasic Tol O{tol:.3f} vs MMC Extension",
                  fontsize=13, fontweight='bold', pad=20)
 
@@ -318,13 +317,53 @@ def draw_scatter_plot(df, tol):
     ax.set_aspect('equal')
     ax.legend(loc='upper right', frameon=True, shadow=True)
 
-    # 축 범위 자동
-    tol_r  = max(basic_r, mmc_r)
-    data_r = max(dev_x.abs().max(), dev_y.abs().max()) if len(dev_x) > 0 else tol_r
-    lim    = max(tol_r, data_r) * 1.2
+    # [BUG FIX 3 보조] 빈 데이터 방어
+    if len(dev_x) > 0 and not dev_x.empty:
+        data_r = max(dev_x.abs().max(), dev_y.abs().max())
+        if np.isnan(data_r):
+            data_r = 0
+    else:
+        data_r = 0
+
+    tol_r = max(basic_r, mmc_r)
+    lim = max(tol_r, data_r) * 1.2
     ax.set_xlim(-lim, lim)
     ax.set_ylim(-lim, lim)
 
+    return fig
+
+# ─────────────────────────────────────────────────
+# [BUG FIX 3] B유형 전용 1D 수평 바 차트
+# B유형은 Y방향 1D 측정이므로 2D 산포도 대신 사용
+# ─────────────────────────────────────────────────
+def draw_1d_plot(df, tol):
+    fig, ax = plt.subplots(figsize=(10, max(4, len(df) * 0.5 + 2)))
+
+    colors = df['RES'].apply(lambda x: '#2ecc71' if 'OK' in x else '#e74c3c')
+
+    ax.barh(df['ID'], df['DY'], color=colors.values, height=0.5, edgecolor='white')
+
+    half_tol = tol / 2
+    ax.axvline( half_tol, color='#3498db', linestyle='--', linewidth=1.5,
+                label=f'+Basic Tol +{half_tol:.3f}')
+    ax.axvline(-half_tol, color='#3498db', linestyle='--', linewidth=1.5,
+                label=f'-Basic Tol -{half_tol:.3f}')
+    ax.axvline(0, color='black', linewidth=1.2)
+
+    # MMC 한계선 (중앙값 기준)
+    rep_limit = df['LIMIT'].median()
+    ax.axvline( rep_limit / 2, color='#e74c3c', linestyle='-', linewidth=1.5,
+                label=f'Median MMC Tol +{rep_limit/2:.3f}')
+    ax.axvline(-rep_limit / 2, color='#e74c3c', linestyle='-', linewidth=1.5,
+                label=f'Median MMC Tol -{rep_limit/2:.3f}')
+
+    ax.set_xlabel("Y Deviation (mm)", fontsize=12)
+    ax.set_title("Position Deviation — Y Direction (1D, B-Type)",
+                 fontsize=13, fontweight='bold', pad=15)
+    ax.legend(loc='lower right', fontsize=9, frameon=True)
+    ax.grid(True, axis='x', linestyle=':', alpha=0.6)
+
+    plt.tight_layout()
     return fig
 
 # ─────────────────────────────────────────────────
@@ -383,7 +422,6 @@ def run_analysis():
                 df = pd.DataFrame(results)
                 df['DX']    = (df['AX'] - df['NX']).round(4)
                 df['DY']    = (df['AY'] - df['NY']).round(4)
-                # 위치도: 성적서값 우선, 없으면 직접 계산
                 df['POS']   = df.apply(
                     lambda r: round(float(r['POS_RAW']), 4)
                               if r['POS_RAW'] is not None
@@ -409,10 +447,15 @@ def run_analysis():
             with st.expander("🔍 파싱 원본 확인 (이상할 때 클릭)"):
                 st.dataframe(df, use_container_width=True)
 
-            # ── 산포도 ────────────────────────────────────────
+            # ── 그래프 ────────────────────────────────────────
             st.divider()
-            st.subheader("🎯 위치도 산포도")
-            fig = draw_scatter_plot(df, tol)
+            if "A" in mode:
+                st.subheader("🎯 위치도 산포도 (2D)")
+                fig = draw_scatter_plot(df, tol)
+            else:
+                # [BUG FIX 3] B유형은 1D 바 차트 사용
+                st.subheader("🎯 위치도 편차 (Y방향 1D)")
+                fig = draw_1d_plot(df, tol)
             st.pyplot(fig)
 
             # ── 통계 요약 ─────────────────────────────────────
@@ -450,10 +493,15 @@ def run_analysis():
                 def hi(v):
                     return ('background-color: #DFF2BF' if 'OK' in str(v)
                             else 'background-color: #FFBABA')
-                try:
+
+                # pandas 버전 체크로 map vs applymap 분기
+                pd_major = int(pd.__version__.split('.')[0])
+                pd_minor = int(pd.__version__.split('.')[1])
+                use_map = (pd_major > 2) or (pd_major == 2 and pd_minor >= 1)
+                if use_map:
                     st.dataframe(disp.style.map(hi, subset=['판정']),
                                  use_container_width=True)
-                except AttributeError:
+                else:
                     st.dataframe(disp.style.applymap(hi, subset=['판정']),
                                  use_container_width=True)
 
