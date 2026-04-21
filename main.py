@@ -105,3 +105,6 @@ def run_position_analysis():
 
         fig.update_layout(width=700, height=700, xaxis=dict(range=[-view_limit, view_limit], zeroline=True), yaxis=dict(range=[-view_limit, view_limit], zeroline=True), plot_bgcolor='white')
         st.plotly_chart(fig, use_container_width=True)
+
+if __name__ == "__main__":
+    run_position_analysis()
