@@ -47,38 +47,35 @@ set_korean_font()
 def set_style():
     st.markdown("""
         <style>
-        /* 사이드바 */
+        /* ───────── 사이드바 ───────── */
         [data-testid="stSidebar"] {
             background-color: #0f172a !important;
         }
 
-        /* 사이드바 기본 텍스트 */
-        [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] .stMarkdown,
-        [data-testid="stSidebar"] .stRadio > div,
-        [data-testid="stSidebar"] .stNumberInput label {
+        /* 사이드바 안 모든 텍스트 흰색 */
+        [data-testid="stSidebar"] * {
             color: #f8fafc !important;
         }
 
-        /* 🔥 입력창 (숫자, 텍스트) 글자색 강제 수정 */
-        input, textarea {
+        /* ───────── 본문 라벨만 검정 ───────── */
+        div:not([data-testid="stSidebar"]) label {
+            color: #111 !important;
+            font-weight: 600;
+        }
+
+        /* ───────── 입력창 ───────── */
+        div:not([data-testid="stSidebar"]) input,
+        div:not([data-testid="stSidebar"]) textarea {
             color: #111 !important;
             background-color: #ffffff !important;
         }
 
-        /* 숫자 입력 내부 */
         .stNumberInput input {
             color: #111 !important;
             background-color: #ffffff !important;
         }
 
-        /* 라벨 (시료 수, 공차 등) */
-        label {
-            color: #111 !important;
-            font-weight: 600;
-        }
-
-        /* 버튼 */
+        /* ───────── 버튼 ───────── */
         .stButton > button {
             background-color: #ef4444 !important;
             color: white !important;
@@ -88,7 +85,7 @@ def set_style():
             height: 3em;
         }
 
-        /* NG 박스 */
+        /* ───────── NG 박스 ───────── */
         .ng-box {
             height: 200px;
             overflow-y: auto;
@@ -98,7 +95,7 @@ def set_style():
             background-color: #fff5f5;
         }
 
-        /* OK 박스 */
+        /* ───────── OK 박스 ───────── */
         .ok-box {
             padding: 12px;
             border-radius: 8px;
@@ -109,7 +106,7 @@ def set_style():
             font-size: 1.1em;
         }
 
-        /* 리포트 카드 */
+        /* ───────── 리포트 카드 ───────── */
         .report-card {
             background-color: #f1f5f9;
             padding: 20px;
