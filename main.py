@@ -5,20 +5,20 @@ import plotly.graph_objects as go
 import re
 
 def run_position_analysis():
-    st.subheader("🎯 위치도 정밀 분석 (오류 수정 및 기능 복구)")
+    st.subheader("🎯 위치도 정밀 분석 (문법 오류 수정 버전)")
 
-    # 1. 설정 영역 (Key 값을 고유하게 부여하여 충돌 방지)
+    # 1. 설정 영역
     with st.expander("⚙️ 분석 기준 설정 (클릭하여 열기)", expanded=True):
         col1, col2, col3 = st.columns(3)
         with col1:
-            sc = st.number_input("샘플 수 (S1~S4 기준 4)", min_value=1, value=4, key="final_sc_fix")
-            tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f", key="final_tol_fix")
+            sc = st.number_input("샘플 수 (S1~S4 기준 4)", min_value=1, value=4, key="final_sc_fix_2")
+            tol = st.number_input("기본 공차(Ø)", value=0.350, format="%.3f", key="final_tol_fix_2")
         with col2:
-            mmc_ref = st.number_input("MMC 기준치", value=0.060, format="%.3f", key="final_mmc_fix")
+            mmc_ref = st.number_input("MMC 기준치", value=0.060, format="%.3f", key="final_mmc_fix_2")
         with col3:
             std_range = round(tol, 2)
-            view_mode = st.radio("그래프 범위", ["표준(권장)", "수동 조절"], horizontal=True, key="final_mode_fix")
-            view_limit = std_range if view_mode == "표준(권장)" else st.slider("범위 조절(±mm)", 0.1, 5.0, std_range, step=0.1, key="final_zoom_fix")
+            view_mode = st.radio("그래프 범위", ["표준(권장)", "수동 조절"], horizontal=True, key="final_mode_fix_2")
+            view_limit = std_range if view_mode == "표준(권장)" else st.slider("범위 조절(±mm)", 0.1, 5.0, std_range, step=0.1, key="final_zoom_fix_2")
 
     # 2. 데이터 입력
     raw_input = st.text_area("성적서 데이터를 붙여넣으세요", height=200, placeholder="숫자 데이터를 입력해주세요.")
@@ -27,10 +27,9 @@ def run_position_analysis():
         st.info("💡 데이터를 입력하면 실시간으로 분석 그래프가 생성됩니다.")
         return
 
-    # 3. 데이터 파싱 및 계산 (try-except 문법 오류 수정 완료)
+    # 3. 데이터 분석 및 계산
     try:
         nums = [float(n) for n in re.findall(r'[-+]?\d*\.\d+|\d+', raw_input)]
-        
         if not nums:
             st.warning("데이터에서 숫자를 찾을 수 없습니다.")
             return
@@ -60,9 +59,8 @@ def run_position_analysis():
         df['최종공차'] = (tol + df['보너스']).round(4)
         df['판정'] = np.where(df['위치도'] <= df['최종공차'], "✅ OK", "❌ NG")
 
-        # 4. 그래프 시각화 (이중 원 및 수치 표기)
+        # 4. 그래프 시각화
         fig = go.Figure()
-        
         r_blue = tol / 2
         fig.add_shape(type="circle", x0=-r_blue, y0=-r_blue, x1=r_blue, y1=r_blue,
                       line=dict(color="RoyalBlue", width=2.5), fillcolor="rgba(65, 105, 225, 0.05)")
@@ -88,10 +86,32 @@ def run_position_analysis():
         fig.update_layout(width=700, height=700, xaxis=dict(range=[-view_limit, view_limit], zeroline=True), yaxis=dict(range=[-view_limit, view_limit], zeroline=True), plot_bgcolor='white')
         st.plotly_chart(fig, use_container_width=True)
         
-        # 5. NG 스크롤 리스트 및 요약
+        # 5. NG 리스트 (오류가 발생했던 HTML 부분 수정 완료)
         st.info(f"📌 **품질 규격 요약** | 도면: Ø{tol:.3f} / 최대합격(MMC): Ø{max_total_tol:.3f}")
         
         ng_list = df[df['판정'] == "❌ NG"]
         if not ng_list.empty:
             st.error(f"🚨 **규격 이탈(NG) 리스트**")
-            ng_html = f"<div style='height: 180px
+            # 삼중 따옴표로 감싸서 여러 줄 입력 오류를 원천 차단합니다.
+            ng_html_content = ""
+            for _, row in ng_list.iterrows():
+                excess = row['위치도'] - row['최종공차']
+                ng_html_content += f"<p style='color: #d32f2f; margin: 4px 0;'>• <b>{row['측정포인트']}</b>: {row['위치도']:.3f} (규격 Ø{row['최종공차']:.3f} 대비 <b>{excess:.3f} 초과</b>)</p>"
+            
+            full_html = f"""
+            <div style='height: 180px; overflow-y: auto; border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: #fff5f5;'>
+                {ng_html_content}
+            </div>
+            """
+            st.markdown(full_html, unsafe_allow_html=True)
+        else:
+            st.success("✅ 모든 시료가 최종 합격 범위 내에 있습니다.")
+
+        st.dataframe(df[['측정포인트', '위치도', '보너스', '최종공차', '판정']])
+
+    except Exception as e:
+        st.error(f"분석 중 오류 발생: {e}")
+
+# 실행부 (이 코드를 파일 맨 밑에 두세요)
+if __name__ == "__main__":
+    run_position_analysis()
