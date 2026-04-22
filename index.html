@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quality Hub Pro v4.0</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════
+   DESIGN SYSTEM — Industrial Precision Dark Theme
+═══════════════════════════════════════════════════ */
+:root {
+  --bg-base:    #0a0e17;
+  --bg-panel:   #111827;
+  --bg-card:    #1a2235;
+  --bg-input:   #0d1526;
+  --border:     #1e2d45;
+  --border-hi:  #2e4a6e;
+  --accent:     #3b82f6;
+  --accent-dim: #1d4ed8;
+  --accent-glow:rgba(59,130,246,.18);
+  --ok:         #10b981;
+  --ok-dim:     #064e3b;
+  --ng:         #ef4444;
+  --ng-dim:     #7f1d1d;
+  --warn:       #f59e0b;
+  --text-1:     #f1f5f9;
+  --text-2:     #94a3b8;
+  --text-3:     #475569;
+  --mono:       'JetBrains Mono', monospace;
+  --sans:       'IBM Plex Sans KR', sans-serif;
+  --radius:     8px;
+  --radius-lg:  12px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:var(--sans);background:var(--bg-base);color:var(--text-1);font-size:14px;}
+
+/* ── Layout ── */
+.app{display:grid;grid-template-columns:240px 1fr;grid-template-rows:56px 1fr;height:100vh;overflow:hidden;}
+.topbar{grid-column:1/-1;background:var(--bg-panel);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 1.5rem;gap:1rem;z-index:10;}
+.sidebar{background:var(--bg-panel);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;padding:1rem 0;}
+.content{overflow-y:auto;padding:2rem;}
+
+/* ── Topbar ── */
+.logo{font-family:var(--mono);font-weight:600;font-size:1rem;color:var(--accent);letter-spacing:.1em;}
+.logo span{color:var(--text-2);font-weight:400;}
+.topbar-actions{margin-left:auto;display:flex;gap:.5rem;}
+
+/* ── Sidebar nav ── */
+.nav-section{padding:.5rem 1rem .25rem;font-size:.7rem;font-weight:600;
+  color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;}
+.nav-item{display:flex;align-items:center;gap:.6rem;padding:.6rem 1.2rem;cursor:pointer;
+  font-size:.875rem;color:var(--text-2);border-left:3px solid transparent;
+  transition:all .15s;user-select:none;}
+.nav-item:hover{background:var(--bg-card);color:var(--text-1);}
+.nav-item.active{background:var(--accent-glow);color:var(--accent);border-left-color:var(--accent);}
+.nav-icon{font-size:1rem;width:18px;text-align:center;}
+
+/* ── Cards ── */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.5rem;margin-bottom:1rem;}
+.card-title{font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:1.2rem;display:flex;align-items:center;gap:.5rem;}
+.card-title::before{content:'';display:inline-block;width:3px;height:14px;background:var(--accent);border-radius:2px;}
+
+/* ── Form elements ── */
+label{display:block;font-size:.78rem;color:var(--text-2);margin-bottom:.35rem;font-weight:500;}
+input[type=text],input[type=number],select,textarea{
+  width:100%;background:var(--bg-input);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text-1);padding:.55rem .75rem;
+  font-family:var(--sans);font-size:.875rem;outline:none;transition:border-color .15s;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+textarea{font-family:var(--mono);font-size:.8rem;resize:vertical;line-height:1.6;}
+select option{background:var(--bg-panel);}
+
+.form-row{display:grid;gap:.75rem;margin-bottom:.75rem;}
+.form-row.cols2{grid-template-columns:1fr 1fr;}
+.form-row.cols3{grid-template-columns:1fr 1fr 1fr;}
+.form-row.cols4{grid-template-columns:1fr 1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.1rem;
+  border-radius:var(--radius);border:none;cursor:pointer;font-family:var(--sans);
+  font-size:.875rem;font-weight:500;transition:all .15s;}
+.btn-primary{background:var(--accent);color:white;}
+.btn-primary:hover{background:var(--accent-dim);transform:translateY(-1px);}
+.btn-sm{padding:.35rem .75rem;font-size:.78rem;}
+.btn-ghost{background:transparent;color:var(--text-2);border:1px solid var(--border);}
+.btn-ghost:hover{border-color:var(--border-hi);color:var(--text-1);}
+.btn-ok{background:var(--ok);color:white;}
+.btn-ng{background:var(--ng);color:white;}
+.btn-full{width:100%;justify-content:center;}
+
+/* ── Metrics ── */
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.75rem;margin-bottom:1rem;}
+.metric-card{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;}
+.metric-label{font-size:.72rem;color:var(--text-3);margin-bottom:.3rem;font-weight:500;}
+.metric-value{font-family:var(--mono);font-size:1.4rem;font-weight:600;color:var(--text-1);}
+.metric-sub{font-size:.72rem;color:var(--text-2);margin-top:.2rem;}
+.metric-card.ok-card{border-color:var(--ok);background:rgba(16,185,129,.06);}
+.metric-card.ok-card .metric-value{color:var(--ok);}
+.metric-card.ng-card{border-color:var(--ng);background:rgba(239,68,68,.06);}
+.metric-card.ng-card .metric-value{color:var(--ng);}
+.metric-card.accent-card{border-color:var(--accent);background:var(--accent-glow);}
+.metric-card.accent-card .metric-value{color:var(--accent);}
+
+/* ── Table ── */
+.tbl-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;font-size:.82rem;}
+th{background:var(--bg-panel);padding:.6rem .9rem;text-align:left;font-weight:600;
+  font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);
+  border-bottom:1px solid var(--border);}
+td{padding:.55rem .9rem;border-bottom:1px solid rgba(30,45,69,.6);
+  font-family:var(--mono);font-size:.82rem;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(59,130,246,.04);}
+.badge{display:inline-flex;align-items:center;padding:.2rem .55rem;border-radius:4px;
+  font-size:.72rem;font-weight:600;letter-spacing:.05em;}
+.badge-ok{background:var(--ok-dim);color:#34d399;}
+.badge-ng{background:var(--ng-dim);color:#f87171;}
+.badge-warn{background:#78350f;color:#fbbf24;}
+
+/* ── Chart container ── */
+.chart-wrap{position:relative;background:var(--bg-input);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:1rem;}
+.chart-title{font-size:.78rem;font-weight:600;color:var(--text-2);margin-bottom:.75rem;letter-spacing:.06em;text-transform:uppercase;}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:.25rem;border-bottom:1px solid var(--border);margin-bottom:1.5rem;}
+.tab{padding:.55rem 1rem;cursor:pointer;font-size:.875rem;color:var(--text-2);
+  border-bottom:2px solid transparent;transition:all .15s;margin-bottom:-1px;}
+.tab:hover{color:var(--text-1);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-pane{display:none;}
+.tab-pane.active{display:block;}
+
+/* ── Alert / Report card ── */
+.alert{border-radius:var(--radius);padding:1rem 1.2rem;margin:.75rem 0;font-size:.875rem;line-height:1.7;}
+.alert-info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);color:#93c5fd;}
+.alert-ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);color:#6ee7b7;}
+.alert-ng{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;}
+.alert-warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#fcd34d;}
+
+/* ── NG list box ── */
+.ng-list{max-height:220px;overflow-y:auto;background:rgba(239,68,68,.04);
+  border:1px solid rgba(239,68,68,.2);border-radius:var(--radius);padding:.75rem;}
+.ng-item{font-family:var(--mono);font-size:.78rem;color:#fca5a5;padding:.2rem 0;border-bottom:1px solid rgba(239,68,68,.1);}
+.ng-item:last-child{border-bottom:none;}
+
+/* ── Progress bar ── */
+.prog-row{display:flex;align-items:center;gap:.75rem;margin:.5rem 0;}
+.prog-bar{flex:1;height:6px;background:var(--bg-input);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;border-radius:3px;transition:width .4s ease;}
+
+/* ── Section header ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
+.section-title{font-size:1.1rem;font-weight:600;color:var(--text-1);}
+.section-sub{font-size:.8rem;color:var(--text-3);margin-top:.15rem;}
+
+/* ── Copy/Download bar ── */
+.action-bar{display:flex;gap:.5rem;flex-wrap:wrap;padding:.75rem 0;border-top:1px solid var(--border);margin-top:.75rem;}
+
+/* ── Scatter SVG ── */
+#scatter-svg{width:100%;aspect-ratio:1;display:block;}
+
+/* ── Page titles ── */
+.page-title{font-size:1.4rem;font-weight:700;margin-bottom:.3rem;}
+.page-sub{font-size:.85rem;color:var(--text-3);margin-bottom:1.5rem;}
+
+/* ── Toggle switch ── */
+.toggle-wrap{display:flex;align-items:center;gap:.6rem;}
+.toggle{width:36px;height:20px;background:var(--border);border-radius:10px;cursor:pointer;
+  position:relative;transition:background .2s;flex-shrink:0;}
+.toggle.on{background:var(--accent);}
+.toggle::after{content:'';position:absolute;width:14px;height:14px;background:white;
+  border-radius:50%;top:3px;left:3px;transition:left .2s;}
+.toggle.on::after{left:19px;}
+
+/* ── Divider ── */
+.divider{height:1px;background:var(--border);margin:1.25rem 0;}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg-base);}
+::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:3px;}
+
+/* ── Code copy block ── */
+.code-block{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);
+  padding:.75rem 1rem;font-family:var(--mono);font-size:.78rem;color:var(--text-2);
+  position:relative;max-height:200px;overflow-y:auto;}
+.copy-btn-overlay{position:absolute;top:.5rem;right:.5rem;}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .app{grid-template-columns:1fr;grid-template-rows:56px auto 1fr;}
+  .sidebar{display:none;}
+  .content{padding:1rem;}
+}
+
+/* ── Animation ── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .3s ease forwards;}
+</style>
+</head>
+<body>
+
+<div class="app">
+<!-- ══ TOPBAR ══════════════════════════════════════ -->
+<header class="topbar">
+  <div class="logo">QUALITY<span>HUB</span> <span style="color:var(--text-3)">PRO v4.0</span></div>
+  <div style="width:1px;height:24px;background:var(--border);margin:0 .5rem;"></div>
+  <span style="font-size:.75rem;color:var(--text-3)">정밀 측정 데이터 분석 시스템</span>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost btn-sm" onclick="downloadHTML()">💾 HTML 저장</button>
+    <button class="btn btn-ghost btn-sm" onclick="copyHTML()">📋 코드 복사</button>
+  </div>
+</header>
+
+<!-- ══ SIDEBAR ═════════════════════════════════════ -->
+<nav class="sidebar">
+  <div class="nav-section">분석 도구</div>
+  <div class="nav-item active" onclick="showPage('pos')" data-page="pos">
+    <span class="nav-icon">🎯</span> 위치도 정밀 분석
+  </div>
+  <div class="nav-item" onclick="showPage('cavity')" data-page="cavity">
+    <span class="nav-icon">📈</span> 멀티 캐비티 분석
+  </div>
+  <div class="nav-section" style="margin-top:.5rem">계산기</div>
+  <div class="nav-item" onclick="showPage('calc')" data-page="calc">
+    <span class="nav-icon">🧮</span> 품질 종합 계산기
+  </div>
+  <div class="nav-section" style="margin-top:.5rem">가이드</div>
+  <div class="nav-item" onclick="showPage('guide')" data-page="guide">
+    <span class="nav-icon">📖</span> 입력 형식 가이드
+  </div>
+  <div style="flex:1"></div>
+  <div style="padding:1rem;font-size:.7rem;color:var(--text-3);line-height:1.6;">
+    위치도 공식: Ø = 2√(dx²+dy²)<br>
+    MMC 보너스: 실측Ø − 기준Ø<br>
+    최종공차 = 기본공차 + 보너스
+  </div>
+</nav>
+
+<!-- ══ CONTENT ═════════════════════════════════════ -->
+<main class="content">
+
+<!-- ────────────────── PAGE: 위치도 분석 ────────────────── -->
+<div id="page-pos" class="fade-in">
+  <div class="section-header">
+    <div>
+      <div class="page-title">🎯 위치도 정밀 분석</div>
+      <div class="page-sub">MMC 기반 위치도 합불 판정 · 산포도 · 경향성 분석</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:1rem;">
+    <!-- 좌측: 입력 -->
+    <div>
+      <div class="card">
+        <div class="card-title">분석 설정</div>
+        <div class="form-row cols2">
+          <div class="form-group">
+            <label>성적서 유형</label>
+            <select id="pos-mode">
+              <option value="A">유형 A — 3줄 세트 (포인트명 / X행 / Y행)</option>
+              <option value="B">유형 B — 자동 (위치도 / MMC / X행 / Y행)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>시료 수 (Sample)</label>
+            <input type="number" id="pos-sc" value="4" min="1" max="100">
+          </div>
+        </div>
+        <div class="form-row cols3">
+          <div class="form-group">
+            <label>기본 공차 (Ø)</label>
+            <input type="number" id="pos-tol" value="0.350" step="0.001" min="0.001">
+          </div>
+          <div class="form-group">
+            <label>MMC 기준 지름</label>
+            <input type="number" id="pos-mref" value="0.350" step="0.001" min="0.001">
+          </div>
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:.4rem">
+              <div class="toggle on" id="toggle-mmc" onclick="toggleMMC()"></div>
+              MMC 보너스 적용
+            </label>
+            <div style="font-size:.72rem;color:var(--text-3);margin-top:.5rem">꺼면 기본 공차만 사용</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>성적서 데이터 붙여넣기 (헤더 제외, 탭/공백 구분)</label>
+          <textarea id="pos-input" rows="10" placeholder="데이터를 여기에 붙여넣으세요...
+
+[유형 A 예시]
+A1   0.12  0.08  0.15  0.11
+50.0  50.12  50.08  50.15  50.11
+30.0  30.05  30.02  30.07  30.04
+
+[유형 B 예시]
+위치도A  0.12  0.08  0.15  0.11
+Max  0.38  0.36  0.37  0.35
+X  50.12  50.08  50.15  50.11
+Y  30.05  30.02  30.07  30.04"></textarea>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.75rem">
+          <button class="btn btn-primary btn-full" onclick="runPosAnalysis()">
+            📊 분석 실행
+          </button>
+          <button class="btn btn-ghost" onclick="clearPos()" title="초기화">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 우측: 설정 요약 -->
+    <div>
+      <div class="card">
+        <div class="card-title">현재 설정</div>
+        <div id="pos-config-summary" style="font-size:.82rem;color:var(--text-2);line-height:2;">
+          유형: A / 시료: 4<br>
+          기본공차: Ø0.350<br>
+          MMC기준: Ø0.350<br>
+          MMC보너스: 적용
+        </div>
+        <div class="divider"></div>
+        <div class="card-title">공식 참고</div>
+        <div style="font-family:var(--mono);font-size:.78rem;color:var(--text-2);line-height:2.2;">
+          위치도 = 2·√(Δx²+Δy²)<br>
+          보너스 = max(0, 실측Ø−기준Ø)<br>
+          허용공차 = 기본공차 + 보너스<br>
+          판정: 위치도 ≤ 허용공차
+        </div>
+      </div>
+      <div class="card" id="pos-quick-result" style="display:none">
+        <div class="card-title">빠른 결과</div>
+        <div id="pos-quick-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과 영역 -->
+  <div id="pos-results" style="display:none">
+    <div class="divider"></div>
+
+    <!-- 메트릭 -->
+    <div class="metrics-grid" id="pos-metrics"></div>
+
+    <!-- 경향성 리포트 -->
+    <div id="pos-report"></div>
+
+    <!-- 산포도 + 테이블 -->
+    <div style="display:grid;grid-template-columns:420px 1fr;gap:1rem;margin-top:1rem;">
+      <div>
+        <div class="card-title" style="margin-bottom:.5rem">위치도 산포도</div>
+        <div class="chart-wrap" style="padding:.5rem;">
+          <canvas id="pos-scatter" width="400" height="400"></canvas>
+        </div>
+        <div style="font-size:.72rem;color:var(--text-3);margin-top:.5rem;text-align:center">
+          ● 녹색=OK &nbsp; ● 빨강=NG &nbsp; — 파랑=기본공차원 &nbsp; — 빨강=MMC공차원
+        </div>
+      </div>
+      <div>
+        <div class="card-title" style="margin-bottom:.5rem">측정 결과 테이블</div>
+        <div class="tbl-wrap" id="pos-table"></div>
+        <div id="pos-ng-list" style="margin-top:.75rem;display:none"></div>
+      </div>
+    </div>
+
+    <!-- 다운로드 -->
+    <div class="action-bar">
+      <button class="btn btn-ghost btn-sm" onclick="downloadCSV()">📥 CSV 저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadScatterImg()">🖼️ 산포도 저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyTableTSV()">📋 표 복사 (TSV)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────── PAGE: 멀티 캐비티 ────────────────── -->
+<div id="page-cavity" style="display:none" class="fade-in">
+  <div class="page-title">📈 멀티 캐비티 통합 분석</div>
+  <div class="page-sub">직접 입력 또는 엑셀 업로드로 캐비티 트렌드·합불을 분석합니다</div>
+
+  <!-- 입력 방식 탭 -->
+  <div class="tabs" style="margin-bottom:1rem">
+    <div class="tab active" id="cav-tab-manual-btn" onclick="switchCavTab('manual')">✏️ 직접 입력</div>
+    <div class="tab" id="cav-tab-excel-btn" onclick="switchCavTab('excel')">📂 엑셀 업로드</div>
+  </div>
+
+  <!-- 직접 입력 패널 -->
+  <div id="cav-tab-manual">
+    <div class="card">
+      <div class="card-title">데이터 입력</div>
+      <div class="form-row cols4">
+        <div class="form-group">
+          <label>포인트 수</label>
+          <input type="number" id="cav-pts" value="5" min="1" max="50" onchange="buildCavTable()">
+        </div>
+        <div class="form-group">
+          <label>캐비티 수</label>
+          <input type="number" id="cav-num" value="4" min="1" max="12" onchange="buildCavTable()">
+        </div>
+        <div class="form-group">
+          <label>SPEC MIN</label>
+          <input type="number" id="cav-min" value="30.10" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>SPEC MAX</label>
+          <input type="number" id="cav-max" value="30.50" step="0.01">
+        </div>
+      </div>
+      <div id="cav-input-table" style="overflow-x:auto;"></div>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="runCavAnalysis()">📊 분석 실행</button>
+        <button class="btn btn-ghost" onclick="fillCavSample()">예시 데이터</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadCavTemplate()" style="margin-left:auto">
+          📄 엑셀 템플릿 다운로드
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 엑셀 업로드 패널 -->
+  <div id="cav-tab-excel" style="display:none">
+    <div class="card">
+      <div class="card-title">엑셀 파일 업로드</div>
+
+      <!-- 템플릿 안내 -->
+      <div class="alert alert-info" style="margin-bottom:1rem">
+        <b>📋 엑셀 양식 규칙</b><br>
+        <span style="font-family:var(--mono);font-size:.8rem">
+          1행: Point &nbsp;|&nbsp; SPEC_MIN &nbsp;|&nbsp; SPEC_MAX &nbsp;|&nbsp; Cavity_1 &nbsp;|&nbsp; Cavity_2 &nbsp;|&nbsp; ... <br>
+          2행~: P1, P2... 순으로 데이터 입력. Cavity 열은 최대 20개까지.
+        </span>
+        <div style="margin-top:.6rem">
+          <button class="btn btn-ghost btn-sm" onclick="downloadCavTemplate()">📄 템플릿 다운로드</button>
+        </div>
+      </div>
+
+      <!-- 드래그 앤 드롭 업로드 영역 -->
+      <div id="cav-drop-zone"
+        style="border:2px dashed var(--border-hi);border-radius:var(--radius-lg);
+               padding:2.5rem;text-align:center;cursor:pointer;transition:all .2s;
+               background:var(--bg-input);"
+        onclick="document.getElementById('cav-file-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='var(--accent-glow)'"
+        ondragleave="this.style.borderColor='var(--border-hi)';this.style.background='var(--bg-input)'"
+        ondrop="handleCavDrop(event)">
+        <div style="font-size:2rem;margin-bottom:.5rem">📊</div>
+        <div style="color:var(--text-2);font-size:.9rem">엑셀 파일을 여기에 드래그하거나 클릭하여 선택</div>
+        <div style="color:var(--text-3);font-size:.75rem;margin-top:.3rem">.xlsx / .xls 지원</div>
+      </div>
+      <input type="file" id="cav-file-input" accept=".xlsx,.xls" style="display:none"
+             onchange="loadCavExcel(this.files[0])">
+
+      <div id="cav-upload-status" style="margin-top:.75rem;display:none"></div>
+
+      <!-- SPEC 설정 (업로드 후 override 가능) -->
+      <div id="cav-excel-spec" style="display:none;margin-top:.75rem">
+        <div class="divider"></div>
+        <div style="font-size:.78rem;color:var(--text-2);margin-bottom:.5rem">
+          SPEC 범위 재설정 (파일에 있는 값 자동 불러옴, 수정 가능)
+        </div>
+        <div class="form-row cols2" style="max-width:360px">
+          <div class="form-group">
+            <label>SPEC MIN</label>
+            <input type="number" id="cav-excel-min" step="0.001">
+          </div>
+          <div class="form-group">
+            <label>SPEC MAX</label>
+            <input type="number" id="cav-excel-max" step="0.001">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="runCavAnalysisFromExcel()">📊 분석 실행</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과 (공통) -->
+  <div id="cav-results" style="display:none">
+    <div class="divider"></div>
+    <div class="metrics-grid" id="cav-metrics"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+      <div class="chart-wrap">
+        <div class="chart-title">캐비티별 분포 (평균 vs SPEC)</div>
+        <canvas id="cav-chart1" height="300"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">포인트별 전체 트렌드</div>
+        <canvas id="cav-chart2" height="300"></canvas>
+      </div>
+    </div>
+    <div style="margin-top:1rem;" id="cav-table-wrap"></div>
+    <div class="action-bar">
+      <button class="btn btn-ghost btn-sm" onclick="downloadCavCSV()">📥 CSV 저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadCavExcel()">📥 Excel 저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyTableTSV('cav')">📋 표 복사</button>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────── PAGE: 계산기 ────────────────── -->
+<div id="page-calc" style="display:none" class="fade-in">
+  <div class="page-title">🧮 품질 종합 계산기</div>
+  <div class="page-sub">MMC 공차 · 단위 변환 · 토크 변환 · 합불 판정</div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchCalcTab('mmc',this)">📏 MMC 공차</div>
+    <div class="tab" onclick="switchCalcTab('unit',this)">🔄 단위 변환</div>
+    <div class="tab" onclick="switchCalcTab('torque',this)">🔧 토크 변환</div>
+    <div class="tab" onclick="switchCalcTab('judge',this)">✅ 합불 판정</div>
+    <div class="tab" onclick="switchCalcTab('pos1',this)">📐 위치도 역산</div>
+  </div>
+
+  <!-- MMC -->
+  <div id="calc-tab-mmc" class="tab-pane active">
+    <div class="card" style="max-width:520px">
+      <div class="card-title">MMC 기하공차 계산</div>
+      <div class="form-row cols3">
+        <div class="form-group">
+          <label>기본 기하공차 (Ø)</label>
+          <input type="number" id="c-base" value="0.0500" step="0.0001" oninput="calcMMC()">
+        </div>
+        <div class="form-group">
+          <label>MMC 규격 지름</label>
+          <input type="number" id="c-mmc" value="10.000" step="0.001" oninput="calcMMC()">
+        </div>
+        <div class="form-group">
+          <label>실측 지름</label>
+          <input type="number" id="c-act" value="10.020" step="0.001" oninput="calcMMC()">
+        </div>
+      </div>
+      <div class="metrics-grid" id="mmc-result" style="margin-top:.5rem"></div>
+      <div class="alert alert-info" style="margin-top:.5rem;font-size:.8rem">
+        보너스공차 = max(0, 실측Ø − MMC규격Ø) &nbsp;|&nbsp; 최종공차 = 기본공차 + 보너스
+      </div>
+    </div>
+  </div>
+
+  <!-- 단위 변환 -->
+  <div id="calc-tab-unit" class="tab-pane">
+    <div class="card" style="max-width:520px">
+      <div class="card-title">길이 단위 변환</div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>입력값</label>
+          <input type="number" id="u-val" value="1.0000" step="0.0001" oninput="calcUnit()">
+        </div>
+        <div class="form-group">
+          <label>변환 방향</label>
+          <select id="u-dir" onchange="calcUnit()">
+            <option>mm → inch</option>
+            <option>inch → mm</option>
+            <option>mm → μm</option>
+            <option>μm → mm</option>
+          </select>
+        </div>
+      </div>
+      <div class="metrics-grid" id="unit-result"></div>
+    </div>
+  </div>
+
+  <!-- 토크 -->
+  <div id="calc-tab-torque" class="tab-pane">
+    <div class="card" style="max-width:520px">
+      <div class="card-title">토크 단위 변환</div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>입력값</label>
+          <input type="number" id="t-val" value="1.000" step="0.001" oninput="calcTorque()">
+        </div>
+        <div class="form-group">
+          <label>변환 방향</label>
+          <select id="t-dir" onchange="calcTorque()">
+            <option>N·m → kgf·cm</option>
+            <option>kgf·cm → N·m</option>
+            <option>N·m → lbf·in</option>
+            <option>lbf·in → N·m</option>
+          </select>
+        </div>
+      </div>
+      <div class="metrics-grid" id="torque-result"></div>
+    </div>
+  </div>
+
+  <!-- 합불 판정 -->
+  <div id="calc-tab-judge" class="tab-pane">
+    <div class="card" style="max-width:520px">
+      <div class="card-title">합불 판정</div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>기준값 (Nominal)</label>
+          <input type="number" id="j-nom" value="0.000" step="0.001" oninput="calcJudge()">
+        </div>
+        <div class="form-group">
+          <label>실측값</label>
+          <input type="number" id="j-meas" value="0.050" step="0.001" oninput="calcJudge()">
+        </div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>상한 공차 (+)</label>
+          <input type="number" id="j-upper" value="0.100" step="0.001" oninput="calcJudge()">
+        </div>
+        <div class="form-group">
+          <label>하한 공차 (−)</label>
+          <input type="number" id="j-lower" value="-0.100" step="0.001" oninput="calcJudge()">
+        </div>
+      </div>
+      <div id="judge-result" style="margin-top:.5rem"></div>
+    </div>
+  </div>
+
+  <!-- 위치도 역산 -->
+  <div id="calc-tab-pos1" class="tab-pane">
+    <div class="card" style="max-width:520px">
+      <div class="card-title">위치도 역산 (편차 → 위치도)</div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>X 편차 (Δx)</label>
+          <input type="number" id="p1-dx" value="0.050" step="0.001" oninput="calcPos1()">
+        </div>
+        <div class="form-group">
+          <label>Y 편차 (Δy)</label>
+          <input type="number" id="p1-dy" value="0.030" step="0.001" oninput="calcPos1()">
+        </div>
+      </div>
+      <div class="form-row cols2">
+        <div class="form-group">
+          <label>기본공차 (Ø)</label>
+          <input type="number" id="p1-tol" value="0.100" step="0.001" oninput="calcPos1()">
+        </div>
+        <div class="form-group">
+          <label>MMC 보너스</label>
+          <input type="number" id="p1-bonus" value="0.000" step="0.001" oninput="calcPos1()">
+        </div>
+      </div>
+      <div class="metrics-grid" id="pos1-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────── PAGE: 가이드 ────────────────── -->
+<div id="page-guide" style="display:none" class="fade-in">
+  <div class="page-title">📖 입력 형식 가이드</div>
+  <div class="page-sub">올바른 데이터 입력 방법 안내</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+    <div class="card">
+      <div class="card-title">유형 A — 3줄 세트</div>
+      <div style="font-size:.82rem;color:var(--text-2);line-height:1.9;margin-bottom:.75rem">
+        포인트명(문자포함) + 위치도값들 / NomX + X측정값들 / NomY + Y측정값들
+      </div>
+      <div class="code-block">A1&nbsp;&nbsp;&nbsp;0.12&nbsp;&nbsp;0.08&nbsp;&nbsp;0.15&nbsp;&nbsp;0.11
+50.0&nbsp;50.12&nbsp;50.08&nbsp;50.15&nbsp;50.11
+30.0&nbsp;30.05&nbsp;30.02&nbsp;30.07&nbsp;30.04
+
+B2&nbsp;&nbsp;&nbsp;0.09&nbsp;&nbsp;0.14&nbsp;&nbsp;0.11&nbsp;&nbsp;0.13
+20.0&nbsp;20.04&nbsp;20.07&nbsp;20.05&nbsp;20.06
+40.0&nbsp;40.02&nbsp;40.05&nbsp;40.03&nbsp;40.04</div>
+      <div class="alert alert-info" style="margin-top:.75rem;font-size:.78rem">
+        줄1: 포인트명으로 시작 (문자 포함 필수)<br>
+        줄2: 첫 번째 숫자 = NomX (기준값)<br>
+        줄3: 첫 번째 숫자 = NomY (기준값)<br>
+        측정값은 탭 또는 공백 2개 이상으로 구분
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">유형 B — 4줄 세트 (X+Y)</div>
+      <div style="font-size:.82rem;color:var(--text-2);line-height:1.9;margin-bottom:.75rem">
+        위치도행 / MMC행 / X측정행 / Y측정행 — 3줄(Y만)도 자동 감지
+      </div>
+      <div class="code-block">위치도A&nbsp;&nbsp;0.12&nbsp;&nbsp;0.08&nbsp;&nbsp;0.15
+Max&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.38&nbsp;&nbsp;0.36&nbsp;&nbsp;0.37
+X&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;50.12&nbsp;50.08&nbsp;50.15
+Y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;30.05&nbsp;30.02&nbsp;30.07</div>
+      <div class="alert alert-warn" style="margin-top:.75rem;font-size:.78rem">
+        ⚠️ 3줄 형식(Y만)의 경우 X편차 계산 불가 → 산포도에서 X=0 처리됨<br>
+        정확한 분석을 위해 X행 포함 4줄 형식 권장
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">위치도 계산 원리</div>
+      <div style="font-family:var(--mono);font-size:.85rem;color:var(--text-2);line-height:2.4;text-align:center;padding:.5rem 0">
+        Δx = 실측X − 기준X<br>
+        Δy = 실측Y − 기준Y<br>
+        위치도(Ø) = 2 × √(Δx² + Δy²)<br>
+        ────────────────<br>
+        보너스 = max(0, 실측Ø − MMC기준Ø)<br>
+        허용공차 = 기본공차 + 보너스<br>
+        ✓ 합격: 위치도 ≤ 허용공차
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">자주 묻는 질문</div>
+      <div style="font-size:.82rem;color:var(--text-2);line-height:1.9">
+        <b style="color:var(--text-1)">Q. 위치도값이 있는데 재계산하나요?</b><br>
+        A. 유형B에서 위치도값이 있으면 그대로 사용합니다. 없으면 Δx·Δy로 계산합니다.<br><br>
+        <b style="color:var(--text-1)">Q. MMC 보너스를 끄면?</b><br>
+        A. 모든 포인트에 기본공차만 적용됩니다. 보너스란에 0으로 표시됩니다.<br><br>
+        <b style="color:var(--text-1)">Q. 산포도에서 이상치가 보이지 않아요.</b><br>
+        A. 범위 밖의 극단값은 화살표(→)로 방향만 표시됩니다.
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div><!-- .app -->
+
+<script>
+/* ═══════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════ */
+function showPage(id) {
+  document.querySelectorAll('[id^="page-"]').forEach(p => p.style.display = 'none');
+  document.getElementById('page-' + id).style.display = 'block';
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector(`[data-page="${id}"]`).classList.add('active');
+}
+
+function switchCalcTab(id, el) {
+  document.querySelectorAll('#page-calc .tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('#page-calc .tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('calc-tab-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+/* ═══════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════ */
+function cleanFloat(v) {
+  try {
+    let s = String(v).trim();
+    /* 부호 보존: 맨 앞 - 만 허용, 나머지 비숫자 제거 */
+    const neg = s.startsWith('-');
+    s = s.replace(/[^0-9.]/g, '');
+    if (!s || s === '.') return null;
+    return parseFloat(neg ? '-' + s : s);
+  } catch { return null; }
+}
+function isNum(v) { return cleanFloat(v) !== null; }
+function rnd(v, n=4) { return Math.round(v * Math.pow(10,n)) / Math.pow(10,n); }
+
+function metricHTML(label, value, sub='', cls='') {
+  return `<div class="metric-card ${cls}">
+    <div class="metric-label">${label}</div>
+    <div class="metric-value">${value}</div>
+    ${sub ? `<div class="metric-sub">${sub}</div>` : ''}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════
+   MMC TOGGLE
+═══════════════════════════════════════════ */
+let mmcOn = true;
+function toggleMMC() {
+  mmcOn = !mmcOn;
+  const t = document.getElementById('toggle-mmc');
+  mmcOn ? t.classList.add('on') : t.classList.remove('on');
+}
+
+/* ═══════════════════════════════════════════
+   PARSER A  — 3줄 세트
+═══════════════════════════════════════════ */
+function parseTypeA(raw, sc) {
+  const results = [];
+  const lines = [];
+  for (const l of raw.trim().split('\n')) {
+    const s = l.trim();
+    if (!s) continue;
+    const parts = s.includes('\t')
+      ? s.split('\t').map(p => p.trim()).filter(Boolean)
+      : s.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
+    if (parts.length) lines.push(parts);
+  }
+  let i = 0, ptNum = 1;
+  while (i <= lines.length - 3) {
+    const [pl, xl, yl] = [lines[i], lines[i+1], lines[i+2]];
+    const ft = pl[0] || '';
+    if (!/[A-Za-z가-힣]/.test(ft)) { i++; continue; }
+    if (!isNum(xl[0]) || !isNum(yl[0])) { i++; continue; }
+
+    const lbl = ft.replace(/[^A-Za-z0-9_가-힣]/g, '') || `P${ptNum}`;
+    const posNums = pl.slice(1).map(cleanFloat).filter(v => v !== null);
+    const xNums   = xl.map(cleanFloat).filter(v => v !== null);
+    const yNums   = yl.map(cleanFloat).filter(v => v !== null);
+
+    if (xNums.length < 2 || yNums.length < 2) { i += 3; continue; }
+    const nomX = xNums[0], nomY = yNums[0];
+    const axVals = xNums.slice(1), ayVals = yNums.slice(1);
+    const n = Math.min(sc, axVals.length, ayVals.length);
+    if (!n) { i += 3; continue; }
+
+    for (let s = 0; s < n; s++) {
+      const si = axVals.length - n + s;
+      const ax = axVals[si], ay = ayVals[si];
+      let posVal = null;
+      if (posNums.length >= n) posVal = posNums[posNums.length - n + s];
+      else if (posNums.length) posVal = posNums[Math.min(s, posNums.length-1)];
+      results.push({ ID:`${lbl}_S${s+1}`, NX:nomX, NY:nomY, AX:ax, AY:ay, POS_RAW:posVal, DIA:null });
+    }
+    ptNum++; i += 3;
+  }
+  return results;
+}
+
+/* ═══════════════════════════════════════════
+   PARSER B  — 3/4줄 자동 감지
+═══════════════════════════════════════════ */
+function parseTypeB(raw, sc, tol, mRef) {
+  const results = [];
+  const lines = [];
+  for (const l of raw.trim().split('\n')) {
+    const s = l.trim();
+    if (!s) continue;
+    const parts = s.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
+    if (parts.length) lines.push(parts);
+  }
+
+  const ft  = row => (row && row[0] ? String(row[0]).trim().toUpperCase() : '');
+  const isX = row => ft(row) === 'X';
+  const isY = row => {
+    if (!row || !row.length) return false;
+    if (ft(row) === 'Y') return true;
+    return isNum(row[0]) && row.some(t => String(t).trim().toUpperCase() === 'Y');
+  };
+  const tail = (arr, n) => arr.slice(-Math.min(n, arr.length));
+
+  function extractRow(row, label) {
+    if (ft(row) === label) return [0.0, row.slice(1).map(cleanFloat).filter(v=>v!==null)];
+    const idx = row.findIndex(t => String(t).trim().toUpperCase() === label);
+    if (idx >= 0) {
+      const nom = isNum(row[0]) ? cleanFloat(row[0]) : 0.0;
+      return [nom, row.slice(idx+1).map(cleanFloat).filter(v=>v!==null)];
+    }
+    const nums = row.map(cleanFloat).filter(v=>v!==null);
+    return [nums[0]||0.0, nums.slice(1)];
+  }
+
+  function extractLabel(posLine) {
+    for (const tok of posLine) {
+      const m = String(tok).match(/위치도\s*([A-Za-z0-9_]+)/);
+      if (m) return m[1];
+    }
+    for (const tok of posLine) {
+      const s = String(tok).trim();
+      if (/^[A-Za-z]{1,4}$/.test(s) && !['X','Y','MAX','MIN'].includes(s.toUpperCase())) return s.toUpperCase();
+    }
+    return null;
+  }
+
+  let i = 0, ptNum = 1;
+  while (i <= lines.length - 3) {
+    const posLine = lines[i], mmcLine = lines[i+1], nextLine = lines[i+2];
+    const fourLine = i <= lines.length - 4 && isX(nextLine) && isY(lines[i+3]);
+    const threeLine = !fourLine && isY(nextLine);
+    if (!fourLine && !threeLine) { i++; continue; }
+
+    const lbl      = extractLabel(posLine) || `P${ptNum}`;
+    const posNums  = posLine.map(cleanFloat).filter(v=>v!==null);
+    const mmcNums  = mmcLine.map(cleanFloat).filter(v=>v!==null);
+
+    let nomX, axVals, nomY, ayVals, step;
+    if (fourLine) {
+      [nomX, axVals] = extractRow(lines[i+2], 'X');
+      [nomY, ayVals] = extractRow(lines[i+3], 'Y');
+      step = 4;
+    } else {
+      nomX = 0.0; axVals = [];
+      [nomY, ayVals] = extractRow(nextLine, 'Y');
+      step = 3;
+    }
+
+    const pv = tail(posNums, sc);
+    const mv = tail(mmcNums, sc);
+    const av = tail(axVals,  sc);
+    const bv = tail(ayVals,  sc);
+    /* n: Y실측값 개수 기준. posNums 없어도 진행 가능 */
+    const n  = Math.min(sc, bv.length);
+    if (!n) { i += step; continue; }
+
+    for (let s = 0; s < n; s++) {
+      const posV   = pv[s] ?? null;
+      const rawMmc = mv[s] ?? null;
+      const mmc    = (rawMmc !== null && rawMmc > 0) ? rawMmc : mRef;
+      const ax     = av[s] ?? nomX;
+      const ay     = bv[s];
+      const dx     = rnd(ax - nomX, 4);
+      const dy     = rnd(ay - nomY, 4);
+      const posResult = posV !== null ? rnd(posV, 4) : rnd(Math.sqrt(dx*dx+dy*dy)*2, 4);
+      const bonus  = rnd(Math.max(0, mmc - mRef), 4);
+      const limit  = rnd(tol + (mmcOn ? bonus : 0), 4);
+      results.push({ ID:`${lbl}_S${s+1}`, NX:nomX, NY:nomY, AX:ax, AY:ay,
+                     DIA:mmc, POS:posResult, BONUS:bonus, LIMIT:limit });
+    }
+    ptNum++; i += step;
+  }
+  return results;
+}
+
+/* ═══════════════════════════════════════════
+   POSITION ANALYSIS — MAIN
+═══════════════════════════════════════════ */
+let posData = [];
+let scatterChart = null;
+
+function runPosAnalysis() {
+  const mode  = document.getElementById('pos-mode').value;
+  const sc    = parseInt(document.getElementById('pos-sc').value) || 4;
+  const tol   = parseFloat(document.getElementById('pos-tol').value) || 0.35;
+  const mRef  = parseFloat(document.getElementById('pos-mref').value) || 0.35;
+  const raw   = document.getElementById('pos-input').value;
+
+  if (!raw.trim()) { alert('데이터를 입력해주세요.'); return; }
+
+  let rows = [];
+  if (mode === 'A') {
+    const parsed = parseTypeA(raw, sc);
+    if (!parsed.length) { alert('데이터 파싱 실패. 유형/형식을 확인해주세요.'); return; }
+    rows = parsed.map(r => {
+      const dx = rnd(r.AX - r.NX, 4);
+      const dy = rnd(r.AY - r.NY, 4);
+      const pos = r.POS_RAW !== null ? rnd(r.POS_RAW, 4) : rnd(Math.sqrt(dx*dx+dy*dy)*2, 4);
+      const limit = rnd(tol, 4);
+      return { ...r, DX:dx, DY:dy, POS:pos, BONUS:0, LIMIT:limit,
+               RES: pos <= limit ? 'OK' : 'NG' };
+    });
+  } else {
+    const parsed = parseTypeB(raw, sc, tol, mRef);
+    if (!parsed.length) { alert('데이터 파싱 실패. 유형/형식을 확인해주세요.'); return; }
+    rows = parsed.map(r => {
+      const dx = rnd(r.AX - r.NX, 4);
+      const dy = rnd(r.AY - r.NY, 4);
+      return { ...r, DX:dx, DY:dy, RES: r.POS <= r.LIMIT ? 'OK' : 'NG' };
+    });
+  }
+
+  posData = rows;
+  renderPosResults(rows, tol, mRef);
+}
+
+function renderPosResults(rows, tol, mRef) {
+  const total = rows.length;
+  const okN   = rows.filter(r => r.RES === 'OK').length;
+  const ngN   = total - okN;
+  const okPct = (okN / total * 100).toFixed(1);
+  const avgDx = (rows.reduce((s,r)=>s+r.DX,0)/total).toFixed(4);
+  const avgDy = (rows.reduce((s,r)=>s+r.DY,0)/total).toFixed(4);
+  const posVals = rows.map(r=>r.POS);
+  const maxPos = posVals.length ? Math.max(...posVals).toFixed(4) : '0.0000';
+  const minPos = posVals.length ? Math.min(...posVals).toFixed(4) : '0.0000';
+
+  // Metrics
+  const mEl = document.getElementById('pos-metrics');
+  const pctClass = ngN === 0 ? 'ok-card' : (parseFloat(okPct) >= 80 ? 'accent-card' : 'ng-card');
+  mEl.innerHTML =
+    metricHTML('전체 샘플', `${total}개`, '', 'accent-card') +
+    metricHTML('합격률', `${okPct}%`, `OK ${okN} / NG ${ngN}`, pctClass) +
+    metricHTML('최대 위치도', `Ø${maxPos}`, '측정값 중 최댓값') +
+    metricHTML('최소 위치도', `Ø${minPos}`, '측정값 중 최솟값') +
+    metricHTML('평균 X편차', `${avgDx}`, 'mm') +
+    metricHTML('평균 Y편차', `${avgDy}`, 'mm');
+
+  // Report
+  const dirX = parseFloat(avgDx) > 0 ? '오른쪽(+)' : '왼쪽(−)';
+  const dirY = parseFloat(avgDy) > 0 ? '위쪽(+)' : '아래쪽(−)';
+  const cls  = ngN === 0 ? 'alert-ok' : (ngN/total < 0.2 ? 'alert-warn' : 'alert-ng');
+  document.getElementById('pos-report').innerHTML = `
+    <div class="alert ${cls}">
+      <b>종합 판정:</b> 합격률 <b>${okPct}%</b> &nbsp;|&nbsp;
+      <b>경향성:</b> ${dirX} ${Math.abs(parseFloat(avgDx)).toFixed(4)}mm · ${dirY} ${Math.abs(parseFloat(avgDy)).toFixed(4)}mm 편향<br>
+      <b>조치 권고:</b>
+      ${ngN === 0 ? '✅ 전 항목 합격 — 현 공정 유지 권장' :
+        '한 방향 편향 → 원점 Offset 보정 검토 / 특정 샘플만 이탈 → 지그·이물질 확인'}
+    </div>`;
+
+  // Table
+  document.getElementById('pos-table').innerHTML = buildPosTable(rows);
+
+  // NG list
+  const ngRows = rows.filter(r => r.RES === 'NG');
+  const ngEl = document.getElementById('pos-ng-list');
+  if (ngRows.length) {
+    ngEl.style.display = 'block';
+    ngEl.innerHTML = `<div class="ng-list">
+      <div style="font-size:.78rem;font-weight:600;color:#f87171;margin-bottom:.4rem">🚩 NG ${ngRows.length}건</div>
+      ${ngRows.map(r=>`<div class="ng-item">${r.ID}: Ø${r.POS.toFixed(4)} (허용 Ø${r.LIMIT.toFixed(4)})</div>`).join('')}
+    </div>`;
+  } else {
+    ngEl.style.display = 'none';
+  }
+
+  // Scatter
+  drawScatter(rows, tol, mRef);
+
+  document.getElementById('pos-results').style.display = 'block';
+
+  // Quick result
+  document.getElementById('pos-quick-result').style.display = 'block';
+  document.getElementById('pos-quick-content').innerHTML =
+    `<div style="font-size:.82rem;color:var(--text-2);line-height:2">
+      샘플 수: ${total}<br>합격: ${okN} / 불합격: ${ngN}<br>합격률: ${okPct}%
+    </div>
+    <div class="${ngN===0?'badge badge-ok':'badge badge-ng'}" style="margin-top:.5rem">
+      ${ngN===0?'ALL PASS':'NG 발생'}
+    </div>`;
+}
+
+function buildPosTable(rows) {
+  const hasDia = rows.some(r => r.DIA !== null && r.DIA !== undefined);
+  return `<table>
+    <thead><tr>
+      <th>ID</th><th>X편차</th><th>Y편차</th>
+      ${hasDia ? '<th>실측Ø</th><th>보너스</th>' : ''}
+      <th>위치도(Ø)</th><th>허용공차(Ø)</th><th>판정</th>
+    </tr></thead>
+    <tbody>
+    ${rows.map(r=>`<tr>
+      <td>${r.ID}</td>
+      <td>${r.DX.toFixed(4)}</td>
+      <td>${r.DY.toFixed(4)}</td>
+      ${hasDia ? `<td>${r.DIA!==null?r.DIA.toFixed(3):'—'}</td><td>${r.BONUS!==undefined?r.BONUS.toFixed(4):'0.0000'}</td>` : ''}
+      <td style="font-weight:600">${r.POS.toFixed(4)}</td>
+      <td>${r.LIMIT.toFixed(4)}</td>
+      <td><span class="badge badge-${r.RES==='OK'?'ok':'ng'}">${r.RES}</span></td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+/* ═══════════════════════════════════════════
+   SCATTER CHART (Chart.js)
+═══════════════════════════════════════════ */
+function drawScatter(rows, tol, mRef) {
+  const canvas = document.getElementById('pos-scatter');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (scatterChart) { scatterChart.destroy(); scatterChart = null; }
+
+  // Tolerance circles as point arrays
+  function circlePoints(r, n=120) {
+    return Array.from({length:n+1}, (_,i) => ({
+      x: r * Math.cos(2*Math.PI*i/n),
+      y: r * Math.sin(2*Math.PI*i/n)
+    }));
+  }
+
+  const basicR = tol / 2;
+  const meds   = rows.map(r => r.LIMIT);
+  const medLim = meds.sort((a,b)=>a-b)[Math.floor(meds.length/2)];
+  const mmcR   = medLim / 2;
+
+  const okPts = rows.filter(r=>r.RES==='OK').map(r=>({x:r.DX,y:r.DY,id:r.ID,pos:r.POS,lim:r.LIMIT}));
+  const ngPts = rows.filter(r=>r.RES==='NG').map(r=>({x:r.DX,y:r.DY,id:r.ID,pos:r.POS,lim:r.LIMIT}));
+
+  // Axis range: 99th percentile + tolerance
+  const allAbs = rows.flatMap(r=>[Math.abs(r.DX),Math.abs(r.DY)]);
+  allAbs.sort((a,b)=>a-b);
+  const q99   = allAbs[Math.floor(allAbs.length*0.99)] || 0;
+  const lim   = Math.max(basicR, mmcR, q99) * 1.35;
+
+  scatterChart = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label:`기본공차원 Ø${tol.toFixed(3)}`, data:circlePoints(basicR),
+          type:'line', borderColor:'rgba(59,130,246,.7)', borderWidth:1.5,
+          borderDash:[5,4], pointRadius:0, fill:false, tension:0 },
+        { label:`중앙값 MMC공차 Ø${medLim.toFixed(3)}`, data:circlePoints(mmcR),
+          type:'line', borderColor:'rgba(239,68,68,.7)', borderWidth:1.5,
+          pointRadius:0, fill:false, tension:0 },
+        { label:'OK', data:okPts, backgroundColor:'rgba(16,185,129,.85)',
+          borderColor:'rgba(16,185,129,1)', pointRadius:5, pointHoverRadius:8 },
+        { label:'NG', data:ngPts, backgroundColor:'rgba(239,68,68,.85)',
+          borderColor:'rgba(239,68,68,1)', pointRadius:6, pointHoverRadius:9 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:true,
+      scales: {
+        x:{ min:-lim, max:lim, title:{display:true,text:'ΔX (mm)',color:'#94a3b8'},
+            grid:{color:'rgba(30,45,69,.6)'}, ticks:{color:'#94a3b8',font:{size:10}},
+            border:{color:'#1e2d45'} },
+        y:{ min:-lim, max:lim, title:{display:true,text:'ΔY (mm)',color:'#94a3b8'},
+            grid:{color:'rgba(30,45,69,.6)'}, ticks:{color:'#94a3b8',font:{size:10}},
+            border:{color:'#1e2d45'} },
+      },
+      plugins: {
+        legend:{ labels:{ color:'#94a3b8', font:{size:11}, boxWidth:12 } },
+        tooltip:{ callbacks:{ label(ctx){
+          const d = ctx.raw;
+          if (d.id) return `${d.id}: Ø${d.pos?.toFixed(4)||''} (허용:Ø${d.lim?.toFixed(4)||''})`;
+          return `(${d.x?.toFixed(4)}, ${d.y?.toFixed(4)})`;
+        }}}
+      },
+      backgroundColor:'#0d1526',
+    },
+    plugins:[{
+      id:'bg', beforeDraw(chart){
+        chart.ctx.fillStyle='#0d1526';
+        chart.ctx.fillRect(0,0,chart.width,chart.height);
+      }
+    }]
+  });
+}
+
+function clearPos() {
+  document.getElementById('pos-input').value = '';
+  document.getElementById('pos-results').style.display = 'none';
+  document.getElementById('pos-quick-result').style.display = 'none';
+}
+
+/* ═══════════════════════════════════════════
+   CAVITY ANALYSIS
+═══════════════════════════════════════════ */
+let cavChart1 = null, cavChart2 = null;
+let cavExcelData = null; // 업로드된 엑셀 데이터 보관
+
+/* ── 탭 전환 ── */
+function switchCavTab(tab) {
+  document.getElementById('cav-tab-manual').style.display = tab === 'manual' ? 'block' : 'none';
+  document.getElementById('cav-tab-excel').style.display  = tab === 'excel'  ? 'block' : 'none';
+  document.getElementById('cav-tab-manual-btn').classList.toggle('active', tab === 'manual');
+  document.getElementById('cav-tab-excel-btn').classList.toggle('active',  tab === 'excel');
+}
+
+/* ── 직접 입력 테이블 빌드 ── */
+function buildCavTable() {
+  const pts  = parseInt(document.getElementById('cav-pts').value) || 5;
+  const cavs = parseInt(document.getElementById('cav-num').value) || 4;
+  let html = `<table style="margin-top:.75rem;"><thead><tr>
+    <th>포인트</th>
+    ${Array.from({length:cavs},(_,i)=>`<th>Cavity_${i+1}</th>`).join('')}
+  </tr></thead><tbody>`;
+  for (let p = 1; p <= pts; p++) {
+    html += `<tr><td style="color:var(--text-2)">P${p}</td>`;
+    for (let c = 1; c <= cavs; c++) {
+      html += `<td><input type="number" step="0.01" value=""
+        id="cav_${c}_${p}" style="width:80px;padding:.3rem .5rem;font-size:.8rem"></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('cav-input-table').innerHTML = html;
+}
+
+function fillCavSample() {
+  const pts  = parseInt(document.getElementById('cav-pts').value) || 5;
+  const cavs = parseInt(document.getElementById('cav-num').value) || 4;
+  const base = [30.2, 30.3, 30.25, 30.35];
+  for (let c = 1; c <= cavs; c++) {
+    for (let p = 1; p <= pts; p++) {
+      const el = document.getElementById(`cav_${c}_${p}`);
+      if (el) el.value = (base[(c-1)%4] + (Math.random()-.5)*0.08).toFixed(3);
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════
+   엑셀 템플릿 다운로드
+   양식: 1행=헤더(Point, SPEC_MIN, SPEC_MAX, Cavity_1..N)
+         2행~=데이터
+═══════════════════════════════════════════ */
+function downloadCavTemplate() {
+  const cavs = 4, pts = 5;
+  const smin = 30.10, smax = 30.50;
+  const sampleVals = [
+    [30.22, 30.31, 30.28, 30.19],
+    [30.18, 30.27, 30.33, 30.24],
+    [30.25, 30.30, 30.22, 30.29],
+    [30.21, 30.28, 30.19, 30.32],
+    [30.30, 30.24, 30.27, 30.20],
+  ];
+
+  /* SheetJS로 xlsx 생성 */
+  const ws_data = [
+    ['Point', 'SPEC_MIN', 'SPEC_MAX', ...Array.from({length:cavs},(_,i)=>`Cavity_${i+1}`)],
+    ...sampleVals.map((row, pi) => [`P${pi+1}`, smin, smax, ...row])
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+  /* 열 너비 설정 */
+  ws['!cols'] = [
+    {wch:8},{wch:10},{wch:10},
+    ...Array.from({length:cavs},()=>({wch:12}))
+  ];
+
+  /* 헤더 행 스타일 (SheetJS CE는 스타일 미지원 - 주석으로 안내) */
+  XLSX.utils.book_append_sheet(wb, ws, '캐비티_측정');
+
+  /* 가이드 시트 추가 */
+  const guide = [
+    ['Quality Hub Pro — 멀티 캐비티 분석 엑셀 양식 가이드'],
+    [''],
+    ['열 구성'],
+    ['Point',     '측정 포인트 이름. P1, P2... 형식 권장 (필수)'],
+    ['SPEC_MIN',  '하한 규격값 (필수). 모든 행 동일하게 입력'],
+    ['SPEC_MAX',  '상한 규격값 (필수). 모든 행 동일하게 입력'],
+    ['Cavity_N',  '각 캐비티 측정값. 열 이름은 Cavity_1, Cavity_2... 형식 유지'],
+    [''],
+    ['주의사항'],
+    ['- 1행은 반드시 헤더 (Point, SPEC_MIN, SPEC_MAX, Cavity_1 ...)'],
+    ['- 캐비티 열은 최대 20개까지 인식'],
+    ['- 빈 셀은 자동으로 제외됨'],
+    ['- 시트 이름은 무관 (첫 번째 시트를 읽음)'],
+  ];
+  const wsGuide = XLSX.utils.aoa_to_sheet(guide);
+  wsGuide['!cols'] = [{wch:16},{wch:60}];
+  XLSX.utils.book_append_sheet(wb, wsGuide, '입력가이드');
+
+  XLSX.writeFile(wb, 'CavityAnalysis_Template.xlsx');
+}
+
+/* ═══════════════════════════════════════════
+   엑셀 업로드 처리
+═══════════════════════════════════════════ */
+function handleCavDrop(e) {
+  e.preventDefault();
+  const zone = document.getElementById('cav-drop-zone');
+  zone.style.borderColor = 'var(--border-hi)';
+  zone.style.background  = 'var(--bg-input)';
+  const file = e.dataTransfer.files[0];
+  if (file) loadCavExcel(file);
+}
+
+function loadCavExcel(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb   = XLSX.read(e.target.result, {type:'array'});
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+
+      if (!rows.length) { cavUploadStatus('error','파일이 비어 있습니다.'); return; }
+
+      /* 헤더 검증 */
+      const keys = Object.keys(rows[0]);
+      if (!keys.includes('Point') || !keys.includes('SPEC_MIN') || !keys.includes('SPEC_MAX')) {
+        cavUploadStatus('error','헤더 오류: Point, SPEC_MIN, SPEC_MAX 열이 필요합니다.');
+        return;
+      }
+
+      const cavCols = keys.filter(k => /^Cavity_\d+$/i.test(k))
+                          .sort((a,b) => parseInt(a.split('_')[1]) - parseInt(b.split('_')[1]));
+      if (!cavCols.length) { cavUploadStatus('error','Cavity_N 형식의 열을 찾을 수 없습니다.'); return; }
+
+      /* SPEC 자동 읽기 */
+      const smin = parseFloat(rows[0]['SPEC_MIN']);
+      const smax = parseFloat(rows[0]['SPEC_MAX']);
+      document.getElementById('cav-excel-min').value = isNaN(smin) ? '' : smin;
+      document.getElementById('cav-excel-max').value = isNaN(smax) ? '' : smax;
+
+      /* 데이터 저장 */
+      cavExcelData = { rows, cavCols };
+
+      cavUploadStatus('ok',
+        `✅ <b>${file.name}</b> 로드 완료 &nbsp;|&nbsp; `+
+        `포인트 ${rows.length}개 · 캐비티 ${cavCols.length}개 (${cavCols.join(', ')})`);
+      document.getElementById('cav-excel-spec').style.display = 'block';
+    } catch(err) {
+      cavUploadStatus('error','파일 읽기 오류: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function cavUploadStatus(type, msg) {
+  const el = document.getElementById('cav-upload-status');
+  el.style.display = 'block';
+  el.innerHTML = `<div class="alert alert-${type==='ok'?'ok':'ng'}">${msg}</div>`;
+}
+
+function runCavAnalysisFromExcel() {
+  if (!cavExcelData) { alert('먼저 엑셀 파일을 업로드해주세요.'); return; }
+  const smin = parseFloat(document.getElementById('cav-excel-min').value);
+  const smax = parseFloat(document.getElementById('cav-excel-max').value);
+  if (isNaN(smin) || isNaN(smax)) { alert('SPEC MIN / MAX를 입력해주세요.'); return; }
+
+  const { rows, cavCols } = cavExcelData;
+  const pts  = rows.length;
+  const cavs = cavCols.length;
+
+  /* 직접입력 설정값 동기화 (다운로드 시 사용) */
+  document.getElementById('cav-min').value = smin;
+  document.getElementById('cav-max').value = smax;
+
+  const data = rows.map((r, pi) => {
+    const row = { pt: r['Point'] || `P${pi+1}` };
+    cavCols.forEach((col, ci) => {
+      const v = parseFloat(r[col]);
+      row[`cav${ci+1}`] = isNaN(v) ? null : v;
+      row[`res${ci+1}`] = (!isNaN(v) && v >= smin && v <= smax) ? 'OK' : 'NG';
+    });
+    return row;
+  });
+
+  renderCavResults(data, cavs, smin, smax);
+}
+
+/* ── 직접 입력 분석 실행 ── */
+function runCavAnalysis() {
+  const pts  = parseInt(document.getElementById('cav-pts').value) || 5;
+  const cavs = parseInt(document.getElementById('cav-num').value) || 4;
+  const smin = parseFloat(document.getElementById('cav-min').value);
+  const smax = parseFloat(document.getElementById('cav-max').value);
+
+  const data = [];
+  for (let p = 1; p <= pts; p++) {
+    const row = { pt: `P${p}` };
+    for (let c = 1; c <= cavs; c++) {
+      const el = document.getElementById(`cav_${c}_${p}`);
+      const v  = el ? parseFloat(el.value) : NaN;
+      row[`cav${c}`] = isNaN(v) ? null : v;
+      row[`res${c}`] = (!isNaN(v) && v >= smin && v <= smax) ? 'OK' : 'NG';
+    }
+    data.push(row);
+  }
+  renderCavResults(data, cavs, smin, smax);
+}
+
+/* ── 공통 렌더 ── */
+function renderCavResults(data, cavs, smin, smax) {
+  // Metrics
+  let totalOK = 0, totalAll = 0;
+  const cavStats = Array.from({length:cavs}, (_,ci) => {
+    const vals = data.map(r=>r[`cav${ci+1}`]).filter(v=>v!==null);
+    const okN  = data.filter(r=>r[`res${ci+1}`]==='OK' && r[`cav${ci+1}`]!==null).length;
+    totalOK += okN; totalAll += vals.length;
+    return {
+      name: `Cavity_${ci+1}`,
+      avg:  (vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : 0).toFixed(3),
+      min:  (vals.length ? Math.min(...vals) : 0).toFixed(3),
+      max:  (vals.length ? Math.max(...vals) : 0).toFixed(3),
+      okPct:(vals.length ? okN/vals.length*100 : 0).toFixed(1)
+    };
+  });
+
+  const mEl = document.getElementById('cav-metrics');
+  mEl.innerHTML =
+    metricHTML('전체 합격률', `${totalAll ? (totalOK/totalAll*100).toFixed(1) : 0}%`, `OK ${totalOK} / 전체 ${totalAll}`, 'ok-card') +
+    cavStats.map(s => metricHTML(s.name, `${s.okPct}%`, `Avg:${s.avg} | ${s.min}~${s.max}`)).join('');
+
+  const COLORS = ['#3b82f6','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f43f5e','#84cc16',
+                  '#a78bfa','#34d399','#fb923c','#60a5fa'];
+
+  // Chart 1: 캐비티별 평균 바
+  if (cavChart1) cavChart1.destroy();
+  cavChart1 = new Chart(document.getElementById('cav-chart1'), {
+    type:'bar',
+    data:{
+      labels: cavStats.map(s=>s.name),
+      datasets:[
+        { label:'평균값', data:cavStats.map(s=>parseFloat(s.avg)),
+          backgroundColor:COLORS.slice(0,cavs).map(c=>c+'cc'), borderColor:COLORS.slice(0,cavs),
+          borderWidth:1.5, borderRadius:4 },
+        { label:'SPEC MIN', data:Array(cavs).fill(smin),
+          type:'line', borderColor:'rgba(59,130,246,.8)', borderDash:[5,4], pointRadius:0, fill:false },
+        { label:'SPEC MAX', data:Array(cavs).fill(smax),
+          type:'line', borderColor:'rgba(239,68,68,.8)', borderDash:[5,4], pointRadius:0, fill:false },
+      ]
+    },
+    options:{ responsive:true,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+      scales:{
+        x:{ticks:{color:'#94a3b8'},grid:{color:'rgba(30,45,69,.5)'}},
+        y:{ticks:{color:'#94a3b8'},grid:{color:'rgba(30,45,69,.5)'},
+           min:Math.min(smin,parseFloat(Math.min(...cavStats.map(s=>s.min))))-0.05,
+           max:Math.max(smax,parseFloat(Math.max(...cavStats.map(s=>s.max))))+0.05}
+      }
+    },
+    plugins:[{id:'bg',beforeDraw(c){c.ctx.fillStyle='#0d1526';c.ctx.fillRect(0,0,c.width,c.height);}}]
+  });
+
+  // Chart 2: 포인트별 트렌드
+  if (cavChart2) cavChart2.destroy();
+  cavChart2 = new Chart(document.getElementById('cav-chart2'), {
+    type:'line',
+    data:{
+      labels: data.map(r=>r.pt),
+      datasets:[
+        ...Array.from({length:cavs},(_,ci)=>({
+          label:`Cavity_${ci+1}`,
+          data:data.map(r=>r[`cav${ci+1}`]),
+          borderColor:COLORS[ci%COLORS.length], backgroundColor:COLORS[ci%COLORS.length]+'33',
+          pointRadius:4, pointHoverRadius:7, tension:.3, fill:false
+        })),
+        { label:'전체평균', data:data.map(r=>{
+            const vs=Array.from({length:cavs},(_,ci)=>r[`cav${ci+1}`]).filter(v=>v!==null);
+            return vs.length ? rnd(vs.reduce((s,v)=>s+v,0)/vs.length,4) : null;
+          }), borderColor:'#ffffff', borderWidth:2.5, borderDash:[6,3], pointRadius:3, fill:false },
+        { label:'SPEC MIN', data:Array(data.length).fill(smin),
+          borderColor:'rgba(59,130,246,.5)', borderDash:[4,4], pointRadius:0, fill:false },
+        { label:'SPEC MAX', data:Array(data.length).fill(smax),
+          borderColor:'rgba(239,68,68,.5)', borderDash:[4,4], pointRadius:0, fill:false },
+      ]
+    },
+    options:{ responsive:true,
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},
+      scales:{
+        x:{ticks:{color:'#94a3b8'},grid:{color:'rgba(30,45,69,.5)'}},
+        y:{ticks:{color:'#94a3b8'},grid:{color:'rgba(30,45,69,.5)'},
+           min:smin-0.05, max:smax+0.05}
+      }
+    },
+    plugins:[{id:'bg',beforeDraw(c){c.ctx.fillStyle='#0d1526';c.ctx.fillRect(0,0,c.width,c.height);}}]
+  });
+
+  // 결과 테이블
+  let tHtml = `<div class="tbl-wrap"><table><thead><tr><th>포인트</th>
+    ${Array.from({length:cavs},(_,ci)=>`<th>Cav${ci+1}</th><th>판정</th>`).join('')}
+  </tr></thead><tbody>`;
+  for (const row of data) {
+    tHtml += `<tr><td>${row.pt}</td>`;
+    for (let c = 1; c <= cavs; c++) {
+      const v = row[`cav${c}`], res = row[`res${c}`];
+      const ng = res === 'NG';
+      tHtml += `<td style="font-family:var(--mono);${ng?'color:var(--ng)':''}">${v!==null?Number(v).toFixed(3):'—'}</td>
+        <td><span class="badge badge-${ng?'ng':'ok'}">${res}</span></td>`;
+    }
+    tHtml += '</tr>';
+  }
+  tHtml += '</tbody></table></div>';
+  document.getElementById('cav-table-wrap').innerHTML = tHtml;
+  document.getElementById('cav-results').style.display = 'block';
+  document.getElementById('cav-results').scrollIntoView({behavior:'smooth', block:'start'});
+
+  /* 결과 데이터 보관 (CSV/Excel 다운로드용) */
+  window._cavLastData = { data, cavs, smin, smax };
+}
+
+/* ── Excel 결과 저장 ── */
+function downloadCavExcel() {
+  const d = window._cavLastData;
+  if (!d) return;
+  const { data, cavs, smin, smax } = d;
+  const header = ['Point', 'SPEC_MIN', 'SPEC_MAX',
+    ...Array.from({length:cavs},(_,i)=>`Cavity_${i+1}`),
+    ...Array.from({length:cavs},(_,i)=>`판정_Cav${i+1}`)
+  ];
+  const rows = data.map(r => [
+    r.pt, smin, smax,
+    ...Array.from({length:cavs},(_,ci)=>r[`cav${ci+1}`]??''),
+    ...Array.from({length:cavs},(_,ci)=>r[`res${ci+1}`]??'')
+  ]);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws['!cols'] = [{wch:8},{wch:10},{wch:10},...Array.from({length:cavs*2},()=>({wch:12}))];
+  XLSX.utils.book_append_sheet(wb, ws, '캐비티분석결과');
+  XLSX.writeFile(wb, 'CavityAnalysis_Result.xlsx');
+}
+
+/* ═══════════════════════════════════════════
+   CALCULATORS
+═══════════════════════════════════════════ */
+function calcMMC() {
+  const base = parseFloat(document.getElementById('c-base').value) || 0;
+  const mmc  = parseFloat(document.getElementById('c-mmc').value)  || 0;
+  const act  = parseFloat(document.getElementById('c-act').value)   || 0;
+  const bonus = Math.max(0, act - mmc);
+  const final = base + bonus;
+  const cls   = 'accent-card';
+  document.getElementById('mmc-result').innerHTML =
+    metricHTML('보너스 공차', `Ø${bonus.toFixed(4)}`, act >= mmc ? '실측≥MMC 적용' : '적용 없음') +
+    metricHTML('최종 허용공차', `Ø${final.toFixed(4)}`, '', cls) +
+    metricHTML('판정 기준', `≤ Ø${final.toFixed(4)}`, '위치도 기준');
+}
+
+function calcUnit() {
+  const v = parseFloat(document.getElementById('u-val').value) || 0;
+  const d = document.getElementById('u-dir').value;
+  let result, unit;
+  if (d === 'mm → inch') { result = v / 25.4; unit = 'inch'; }
+  else if (d === 'inch → mm') { result = v * 25.4; unit = 'mm'; }
+  else if (d === 'mm → μm') { result = v * 1000; unit = 'μm'; }
+  else { result = v / 1000; unit = 'mm'; }
+  document.getElementById('unit-result').innerHTML =
+    metricHTML('입력', `${v}`, d.split('→')[0].trim()) +
+    metricHTML('결과', `${result.toFixed(6)}`, unit, 'accent-card');
+}
+
+function calcTorque() {
+  const v = parseFloat(document.getElementById('t-val').value) || 0;
+  const d = document.getElementById('t-dir').value;
+  let result, unit;
+  if (d === 'N·m → kgf·cm') { result = v * 10.197; unit = 'kgf·cm'; }
+  else if (d === 'kgf·cm → N·m') { result = v / 10.197; unit = 'N·m'; }
+  else if (d === 'N·m → lbf·in') { result = v * 8.8507; unit = 'lbf·in'; }
+  else { result = v / 8.8507; unit = 'N·m'; }
+  document.getElementById('torque-result').innerHTML =
+    metricHTML('입력', `${v}`, d.split('→')[0].trim()) +
+    metricHTML('결과', `${result.toFixed(4)}`, unit, 'accent-card');
+}
+
+function calcJudge() {
+  const nom   = parseFloat(document.getElementById('j-nom').value) || 0;
+  const meas  = parseFloat(document.getElementById('j-meas').value) || 0;
+  const upper = parseFloat(document.getElementById('j-upper').value) || 0;
+  const lower = parseFloat(document.getElementById('j-lower').value) || 0;
+  const lo = nom + lower, hi = nom + upper;
+  const ok = meas >= lo && meas <= hi;
+  const dev = meas - nom;
+  document.getElementById('judge-result').innerHTML = `
+    <div class="alert ${ok?'alert-ok':'alert-ng'}">
+      실측값 <b>${meas.toFixed(4)}</b> → <b>${ok?'✅ 합격':'❌ 불합격'}</b><br>
+      허용범위: <b>${lo.toFixed(4)} ~ ${hi.toFixed(4)}</b><br>
+      기준 대비 편차: <b>${dev>=0?'+':''}${dev.toFixed(4)}</b>
+    </div>
+    <div class="metrics-grid" style="margin-top:.5rem">
+      ${metricHTML('허용 상한', hi.toFixed(4))}
+      ${metricHTML('실측값', meas.toFixed(4), '', ok?'ok-card':'ng-card')}
+      ${metricHTML('허용 하한', lo.toFixed(4))}
+    </div>`;
+}
+
+function calcPos1() {
+  const dx    = parseFloat(document.getElementById('p1-dx').value) || 0;
+  const dy    = parseFloat(document.getElementById('p1-dy').value) || 0;
+  const tol   = parseFloat(document.getElementById('p1-tol').value) || 0;
+  const bonus = parseFloat(document.getElementById('p1-bonus').value) || 0;
+  const pos   = Math.sqrt(dx*dx + dy*dy) * 2;
+  const limit = tol + (mmcOn ? Math.max(0, bonus) : 0);
+  const ok    = pos <= limit;
+  document.getElementById('pos1-result').innerHTML =
+    metricHTML('계산된 위치도', `Ø${pos.toFixed(4)}`, '2·√(Δx²+Δy²)', ok?'ok-card':'ng-card') +
+    metricHTML('허용공차', `Ø${limit.toFixed(4)}`) +
+    metricHTML('판정', ok?'✅ 합격':'❌ 불합격', '', ok?'ok-card':'ng-card');
+}
+
+/* ═══════════════════════════════════════════
+   DOWNLOAD / COPY
+═══════════════════════════════════════════ */
+function downloadCSV() {
+  if (!posData.length) return;
+  const cols = ['ID','NX','NY','AX','AY','DX','DY','DIA','POS','BONUS','LIMIT','RES'];
+  const lines = [cols.join(',')];
+  for (const r of posData) lines.push(cols.map(c=>r[c]??'').join(','));
+  const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Position_Analysis.csv';
+  a.click();
+}
+
+function downloadScatterImg() {
+  const canvas = document.getElementById('pos-scatter');
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = 'Scatter_Plot.png';
+  a.click();
+}
+
+function copyTableTSV(target) {
+  let tsv;
+  if (target === 'cav') {
+    const d = window._cavLastData;
+    if (!d) return;
+    const { data, cavs } = d;
+    const header = ['Point', ...Array.from({length:cavs},(_,i)=>`Cavity_${i+1}`), ...Array.from({length:cavs},(_,i)=>`판정_Cav${i+1}`)];
+    const rows = data.map(r => [r.pt, ...Array.from({length:cavs},(_,ci)=>r[`cav${ci+1}`]??''), ...Array.from({length:cavs},(_,ci)=>r[`res${ci+1}`]??'')]);
+    tsv = [header, ...rows].map(r => r.join('\t')).join('\n');
+  } else {
+    if (!posData.length) return;
+    const cols = ['ID','DX','DY','POS','LIMIT','RES'];
+    tsv = [cols, ...posData.map(r => cols.map(c => r[c] ?? ''))].map(r => r.join('\t')).join('\n');
+  }
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(tsv).then(() => alert('클립보드에 복사되었습니다.'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = tsv; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    alert('클립보드에 복사되었습니다.');
+  }
+}
+
+function downloadCavCSV() {
+  const d = window._cavLastData;
+  if (!d) return;
+  const { data, cavs, smin, smax } = d;
+  const header = ['Point','SPEC_MIN','SPEC_MAX',
+    ...Array.from({length:cavs},(_,i)=>`Cavity_${i+1}`),
+    ...Array.from({length:cavs},(_,i)=>`판정_Cav${i+1}`)
+  ];
+  const lines = [header.join(',')];
+  for (const r of data) {
+    lines.push([
+      r.pt, smin, smax,
+      ...Array.from({length:cavs},(_,ci)=>r[`cav${ci+1}`]??''),
+      ...Array.from({length:cavs},(_,ci)=>r[`res${ci+1}`]??'')
+    ].join(','));
+  }
+  const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'CavityAnalysis_Result.csv'; a.click();
+}
+
+function downloadHTML() {
+  const html = document.documentElement.outerHTML;
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'QualityHub_Pro_v4.html';
+  a.click();
+}
+
+function copyHTML() {
+  const html = document.documentElement.outerHTML;
+  navigator.clipboard.writeText(html).then(
+    () => alert('소스코드가 클립보드에 복사되었습니다.\n총 ' + html.length + '자'),
+    () => {
+      const ta = document.createElement('textarea');
+      ta.value = html; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      alert('소스코드가 클립보드에 복사되었습니다.');
+    }
+  );
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  buildCavTable();
+  calcMMC(); calcUnit(); calcTorque(); calcJudge(); calcPos1();
+  // live update config summary
+  ['pos-mode','pos-sc','pos-tol','pos-mref'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateConfigSummary);
+  });
+  updateConfigSummary();
+});
+
+function updateConfigSummary() {
+  const mode = document.getElementById('pos-mode').value;
+  const sc   = document.getElementById('pos-sc').value;
+  const tol  = document.getElementById('pos-tol').value;
+  const mr   = document.getElementById('pos-mref').value;
+  document.getElementById('pos-config-summary').innerHTML =
+    `유형: ${mode} &nbsp;/&nbsp; 시료: ${sc}<br>
+     기본공차: Ø${parseFloat(tol).toFixed(3)}<br>
+     MMC기준: Ø${parseFloat(mr).toFixed(3)}<br>
+     MMC보너스: ${mmcOn?'<span style="color:var(--ok)">적용</span>':'<span style="color:var(--text-3)">미적용</span>'}`;
+}
+</script>
+</body>
+</html>
